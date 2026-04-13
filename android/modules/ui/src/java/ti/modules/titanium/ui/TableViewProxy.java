@@ -7,6 +7,7 @@
 package ti.modules.titanium.ui;
 
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -77,7 +78,7 @@ public class TableViewProxy extends RecyclerViewProxy
 
 	// Batch update support
 	private volatile boolean batchUpdateMode = false;
-	private int batchDepth = 0;
+	private final AtomicInteger batchDepth = new AtomicInteger(0);
 	private final List<Runnable> updateQueue = Collections.synchronizedList(new ArrayList<>());
 	private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -1065,7 +1066,7 @@ public class TableViewProxy extends RecyclerViewProxy
 	@Kroll.method
 	public void beginBatchUpdate()
 	{
-		batchDepth++;
+		batchDepth.incrementAndGet();
 		batchUpdateMode = true;
 	}
 
@@ -1076,10 +1077,10 @@ public class TableViewProxy extends RecyclerViewProxy
 	@Kroll.method
 	public void endBatchUpdate()
 	{
-		if (batchDepth > 0) {
-			batchDepth--;
+		if (batchDepth.get() > 0) {
+			batchDepth.decrementAndGet();
 		}
-		if (batchDepth == 0) {
+		if (batchDepth.get() == 0) {
 			batchUpdateMode = false;
 			if (!updateQueue.isEmpty()) {
 				// Apply all queued updates on main thread

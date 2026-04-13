@@ -674,8 +674,10 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 			query = query.toLowerCase();
 		}
 
-		// Clear current models.
+		// Clear current models and stale complexity cache.
 		this.rows.clear();
+		this.complexityCache.clear();
+		this.lastRowCount = 0;
 
 		// Add placeholder item for TableView header.
 		if (hasHeader) {
