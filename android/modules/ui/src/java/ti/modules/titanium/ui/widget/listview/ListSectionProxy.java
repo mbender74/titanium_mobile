@@ -34,6 +34,9 @@ public class ListSectionProxy extends TiViewProxy
 	private int filteredItemCount = -1;
 	private boolean shouldUpdate = true;
 
+	// Cached ListViewProxy reference to avoid parent chain walks.
+	private ListViewProxy cachedListViewProxy;
+
 	public ListSectionProxy()
 	{
 		super();
@@ -52,6 +55,7 @@ public class ListSectionProxy extends TiViewProxy
 
 		// Add to current items.
 		this.items.addAll(items);
+		reindexItems();
 
 		// Notify ListView of new items.
 		update();
@@ -82,6 +86,7 @@ public class ListSectionProxy extends TiViewProxy
 			item.setParent(null);
 			this.items.remove(item);
 		}
+		reindexItems();
 
 		// Notify ListView of deleted items.
 		update();
@@ -236,19 +241,33 @@ public class ListSectionProxy extends TiViewProxy
 	}
 
 	/**
+	 * Override setParent to invalidate cached ListViewProxy reference.
+	 *
+	 * @param parent Parent proxy.
+	 */
+	@Override
+	public void setParent(TiViewProxy parent)
+	{
+		super.setParent(parent);
+		cachedListViewProxy = null;
+	}
+
+	/**
 	 * Obtain parent ListView proxy.
+	 * Uses cached reference to avoid parent chain walks.
 	 *
 	 * @return ListViewProxy
 	 */
 	public ListViewProxy getListViewProxy()
 	{
-		TiViewProxy parent = getParent();
-		while (!(parent instanceof ListViewProxy) && parent != null) {
-
-			// Traverse up until parent is reached.
-			parent = parent.getParent();
+		if (cachedListViewProxy == null) {
+			TiViewProxy parent = getParent();
+			while (!(parent instanceof ListViewProxy) && parent != null) {
+				parent = parent.getParent();
+			}
+			cachedListViewProxy = (ListViewProxy) parent;
 		}
-		return (ListViewProxy) parent;
+		return cachedListViewProxy;
 	}
 
 	/**
@@ -265,6 +284,7 @@ public class ListSectionProxy extends TiViewProxy
 
 		// Insert items at specified index.
 		this.items.addAll(index, items);
+		reindexItems();
 
 		// Notify ListView of new items.
 		update();
@@ -443,6 +463,7 @@ public class ListSectionProxy extends TiViewProxy
 
 		removeAllItems();
 		this.items.addAll(newItems);
+		reindexItems();
 
 		// Notify ListView of new items.
 		update();
@@ -469,6 +490,17 @@ public class ListSectionProxy extends TiViewProxy
 	public String toString()
 	{
 		return "[object ListSectionProxy]";
+	}
+
+	/**
+	 * Re-index all items in this section.
+	 * Called after item mutations to keep cached indexInSection values current.
+	 */
+	private void reindexItems()
+	{
+		for (int i = 0; i < items.size(); i++) {
+			items.get(i).setIndexInSection(i);
+		}
 	}
 
 	/**
@@ -504,6 +536,7 @@ public class ListSectionProxy extends TiViewProxy
 
 		if (item != null) {
 			this.items.set(index, item);
+			reindexItems();
 
 			// Notify ListView of new items.
 			update();

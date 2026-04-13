@@ -60,6 +60,12 @@ public class ListItemProxy extends TiViewProxy
 	private boolean selected = false;
 	private String cachedSearchableTextLower = null;
 
+	// Cached ListViewProxy reference to avoid parent chain walks.
+	private ListViewProxy cachedListViewProxy;
+
+	// Cached index in section to avoid O(n) indexOf() calls.
+	private int indexInSection = -1;
+
 	public ListItemProxy()
 	{
 		super();
@@ -340,13 +346,14 @@ public class ListItemProxy extends TiViewProxy
 
 		// Do not continue if this proxy has no child views.
 		// This will force given proxy to regenerate child proxies from template.
-		if (!hasChildren()) {
+		if (children.isEmpty()) {
 			return;
 		}
+		if (children.get(0).peekView() == null) {
+			return;
+		}
+
 		TiViewProxy[] childProxies = getChildren();
-		if (childProxies[0].peekView() == null) {
-			return;
-		}
 
 		// Move this proxy's children to given proxy and overwrite their properties.
 		// Note: This also moves their native views. Updating properties will also update the native views.
@@ -545,33 +552,54 @@ public class ListItemProxy extends TiViewProxy
 
 	/**
 	 * Get item index in section.
+	 * Uses cached value to avoid O(n) indexOf() calls.
 	 *
 	 * @return Integer of index.
 	 */
 	public int getIndexInSection()
 	{
-		final TiViewProxy parent = getParent();
+		return this.indexInSection;
+	}
 
-		if (parent instanceof ListSectionProxy section) {
+	/**
+	 * Set item index in section.
+	 * Called by ListSectionProxy after item mutations.
+	 *
+	 * @param index Index in section.
+	 */
+	public void setIndexInSection(int index)
+	{
+		this.indexInSection = index;
+	}
 
-			return section.getListItemIndex(this);
-		}
-
-		return -1;
+	/**
+	 * Override setParent to invalidate cached ListViewProxy reference.
+	 *
+	 * @param parent Parent proxy.
+	 */
+	@Override
+	public void setParent(TiViewProxy parent)
+	{
+		super.setParent(parent);
+		cachedListViewProxy = null;
 	}
 
 	/**
 	 * Get related ListView proxy for item.
+	 * Uses cached reference to avoid parent chain walks.
 	 *
 	 * @return ListViewProxy
 	 */
 	public ListViewProxy getListViewProxy()
 	{
-		TiViewProxy parent = getParent();
-		while (!(parent instanceof ListViewProxy) && parent != null) {
-			parent = parent.getParent();
+		if (cachedListViewProxy == null) {
+			TiViewProxy parent = getParent();
+			while (!(parent instanceof ListViewProxy) && parent != null) {
+				parent = parent.getParent();
+			}
+			cachedListViewProxy = (ListViewProxy) parent;
 		}
-		return (ListViewProxy) parent;
+		return cachedListViewProxy;
 	}
 
 	/**
