@@ -255,7 +255,7 @@ public class TableViewHolder extends TiRecyclerViewHolder<TableViewRowProxy>
 			if (properties.containsKeyAndNotNull(TiC.PROPERTY_LEFT_IMAGE)) {
 				final String url = properties.getString(TiC.PROPERTY_LEFT_IMAGE);
 				if (needsUpdate("leftImage", url)) {
-					final Drawable drawable = TiUIHelper.getResourceDrawable((Object) url);
+					final Drawable drawable = getCachedDrawable(url);
 					if (drawable != null) {
 						this.leftImage.setImageDrawable(drawable);
 						this.leftImage.setVisibility(View.VISIBLE);
@@ -281,7 +281,7 @@ public class TableViewHolder extends TiRecyclerViewHolder<TableViewRowProxy>
 			if (properties.containsKeyAndNotNull(TiC.PROPERTY_RIGHT_IMAGE)) {
 				final String url = properties.getString(TiC.PROPERTY_RIGHT_IMAGE);
 				if (needsUpdate("rightImage", url)) {
-					final Drawable drawable = TiUIHelper.getResourceDrawable((Object) url);
+					final Drawable drawable = getCachedDrawable(url);
 					if (drawable != null) {
 						this.rightImage.setImageDrawable(drawable);
 						this.rightImage.setVisibility(View.VISIBLE);

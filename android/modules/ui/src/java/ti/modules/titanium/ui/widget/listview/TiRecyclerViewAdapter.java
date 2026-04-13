@@ -68,7 +68,7 @@ public abstract class TiRecyclerViewAdapter<VH extends TiRecyclerViewHolder<V>, 
 	@Override
 	public long getItemId(int position)
 	{
-		return this.models.get(position).hashCode();
+		return System.identityHashCode(this.models.get(position));
 	}
 
 	/**

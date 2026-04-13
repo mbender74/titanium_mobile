@@ -55,6 +55,7 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 	private static final String TAG = "TiTableView";
 
 	private static final int CACHE_SIZE = 32;
+	private static final int DEFAULT_POOL_SIZE = 20;
 	private static final int PRELOAD_INTERVAL = 800;
 	private static final int SCROLL_EVENT_THROTTLE_MS = 16; // ~60fps
 
@@ -70,6 +71,13 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 	private long lastScrollEventTime = 0;
 	private boolean isPreloading = false;
 	private long lastScrollTimestamp = 0;
+
+	// Shared RecycledViewPool across all TiTableView instances.
+	private static final RecyclerView.RecycledViewPool sharedViewPool = new RecyclerView.RecycledViewPool();
+	static
+	{
+		sharedViewPool.setMaxRecycledViews(0, DEFAULT_POOL_SIZE);
+	}
 
 	private final TableViewAdapter adapter;
 	private final DividerItemDecoration decoration;
@@ -168,6 +176,9 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 
 		// Optimize scroll performance.
 		recyclerView.setItemViewCacheSize(CACHE_SIZE);
+
+		// Share RecycledViewPool across all TiTableView instances.
+		recyclerView.setRecycledViewPool(sharedViewPool);
 
 		// Set list separator.
 		decoration = new DividerItemDecoration(getContext(), DividerItemDecoration.VERTICAL);

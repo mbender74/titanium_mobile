@@ -24,6 +24,7 @@ import android.os.Build;
 import android.util.TypedValue;
 import android.view.ViewGroup;
 
+import androidx.collection.LruCache;
 import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -55,6 +56,10 @@ public abstract class TiRecyclerViewHolder<V extends TiViewProxy> extends Recycl
 	protected static Drawable moreDrawable;
 	protected static Drawable checkcircleDrawable;
 	protected static Drawable circleDrawable;
+
+	// Static drawable cache shared across all ViewHolder instances.
+	// Key: URL string, Value: Cached Drawable (mutated for independent state).
+	private static final LruCache<String, Drawable> drawableCache = new LruCache<>(50);
 
 	protected static Resources resources;
 
@@ -148,6 +153,37 @@ public abstract class TiRecyclerViewHolder<V extends TiViewProxy> extends Recycl
 		} else {
 			Log.w(TAG, "Could not obtain context resources instance.");
 		}
+	}
+
+	/**
+	 * Get a cached drawable for the given URL, or load and cache it.
+	 * Resource drawables are mutated before caching to avoid shared state.
+	 *
+	 * @param url The image URL or resource path.
+	 * @return The cached or newly loaded Drawable, or null if loading fails.
+	 */
+	protected static Drawable getCachedDrawable(String url)
+	{
+		if (url == null || url.isEmpty()) {
+			return null;
+		}
+
+		final Drawable cached = drawableCache.get(url);
+		if (cached != null) {
+			final Drawable.ConstantState cs = cached.getConstantState();
+			if (cs != null) {
+				return cs.newDrawable().mutate();
+			}
+			return cached;
+		}
+
+		final Drawable drawable = TiUIHelper.getResourceDrawable((Object) url);
+		if (drawable != null) {
+			final Drawable toCache = drawable.mutate();
+			drawableCache.put(url, toCache);
+			return toCache;
+		}
+		return null;
 	}
 
 	/**
