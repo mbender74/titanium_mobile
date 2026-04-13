@@ -647,9 +647,7 @@ public class TableViewHolder extends TiRecyclerViewHolder<TableViewRowProxy>
 					// Amend maximum size for header to parent TableView measured height.
 					this.header.setChildFillHeight(nativeTableView.getMeasuredHeight());
 
-					this.header.addView(headerView, new ViewGroup.LayoutParams(
-						ViewGroup.LayoutParams.MATCH_PARENT,
-						ViewGroup.LayoutParams.WRAP_CONTENT));
+					this.header.addView(headerView, headerProxy.getOrCreateView().getLayoutParams());
 					this.header.setVisibility(View.VISIBLE);
 				}
 			}
@@ -696,9 +694,7 @@ public class TableViewHolder extends TiRecyclerViewHolder<TableViewRowProxy>
 					// Amend maximum size for footer to parent TableView measured height.
 					this.footer.setChildFillHeight(nativeTableView.getMeasuredHeight());
 
-					this.footer.addView(footerView, new ViewGroup.LayoutParams(
-						ViewGroup.LayoutParams.MATCH_PARENT,
-						ViewGroup.LayoutParams.WRAP_CONTENT));
+					this.footer.addView(footerView, footerProxy.getOrCreateView().getLayoutParams());
 					this.footer.setVisibility(View.VISIBLE);
 				}
 			}
