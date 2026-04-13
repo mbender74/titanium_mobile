@@ -17,7 +17,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.appcelerator.titanium.proxy.TiViewProxy;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import androidx.collection.LruCache;
@@ -188,9 +187,9 @@ public abstract class TiRecyclerViewAdapter<VH extends TiRecyclerViewHolder<V>, 
 			}
 
 			// Calculate content specific hashes.
-			// Compare properties and children.
-			final long oldHash = ((long) oldView.getProperties().hashCode()) ^ Arrays.hashCode(oldView.getChildren());
-			final long newHash = ((long) newView.getProperties().hashCode()) ^ Arrays.hashCode(newView.getChildren());
+			// Compare properties and children without array allocation.
+			final long oldHash = ((long) oldView.getProperties().hashCode()) ^ oldView.childrenHashCode();
+			final long newHash = ((long) newView.getProperties().hashCode()) ^ newView.childrenHashCode();
 
 			// Update hash cache
 			final Long oldCachedHash = modelHashCache.get(oldView);

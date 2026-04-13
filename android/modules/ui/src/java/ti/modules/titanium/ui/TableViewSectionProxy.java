@@ -57,6 +57,7 @@ public class TableViewSectionProxy extends TiViewProxy
 
 			row.setParent(this);
 			this.rows.add(index, row);
+			reindexRows();
 		}
 	}
 
@@ -89,6 +90,7 @@ public class TableViewSectionProxy extends TiViewProxy
 
 			row.setParent(this);
 			this.rows.add(row);
+			reindexRows();
 
 			update();
 		}
@@ -236,6 +238,7 @@ public class TableViewSectionProxy extends TiViewProxy
 		if (row != null && this.rows.contains(row)) {
 			this.rows.remove(row);
 			row.setParent(null);
+			reindexRows();
 
 			update();
 		}
@@ -273,6 +276,7 @@ public class TableViewSectionProxy extends TiViewProxy
 			existingRow.setParent(null);
 			row.setParent(this);
 			this.rows.set(index, row);
+			reindexRows();
 		}
 	}
 
@@ -297,6 +301,17 @@ public class TableViewSectionProxy extends TiViewProxy
 	public String toString()
 	{
 		return "[object TableViewSectionProxy]";
+	}
+
+	/**
+	 * Re-index all rows in this section.
+	 * Called after row mutations to keep cached indexInSection values current.
+	 */
+	private void reindexRows()
+	{
+		for (int i = 0; i < rows.size(); i++) {
+			rows.get(i).setIndexInSection(i);
+		}
 	}
 
 	/**

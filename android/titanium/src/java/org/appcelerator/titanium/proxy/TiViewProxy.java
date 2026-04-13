@@ -109,6 +109,24 @@ public abstract class TiViewProxy extends KrollProxy
 	protected ArrayList<TiViewProxy> children = new ArrayList<>();
 	protected WeakReference<TiViewProxy> parent;
 
+	/**
+	 * Compute hash code of children without allocating an array.
+	 * This avoids the array allocation from getChildren().toArray().
+	 *
+	 * @return Hash code of children list.
+	 */
+	public int childrenHashCode()
+	{
+		if (children == null || children.isEmpty()) {
+			return 0;
+		}
+		int hash = 1;
+		for (TiViewProxy child : children) {
+			hash = 31 * hash + (child == null ? 0 : child.hashCode());
+		}
+		return hash;
+	}
+
 	protected TiUIView view;
 	protected Object pendingAnimationLock = new Object();
 	protected TiAnimationBuilder pendingAnimation;

@@ -60,6 +60,15 @@ public class TableViewRowProxy extends TiViewProxy
 	private boolean placeholder = false;
 	private boolean selected = false;
 
+	// Cached TableViewProxy reference to avoid parent chain walks.
+	private TableViewProxy cachedTableViewProxy;
+
+	// Cached index in section to avoid O(n) indexOf() calls.
+	private int indexInSection = -1;
+
+	// Track whether the row view has been fully initialized with processProperties.
+	private boolean viewInitialized = false;
+
 	// FIXME: On iOS the same row can be added to a table multiple times.
 	//        Due to constraints, we need to create a new proxy and track changes.
 	private final List<WeakReference<TableViewRowProxy>> clones = new ArrayList<>(0);
@@ -226,8 +235,12 @@ public class TableViewRowProxy extends TiViewProxy
 			// Reset opacity of view.
 			nativeView.setAlpha(1.0f);
 
-			// Apply proxy properties.
-			row.processProperties(this.properties);
+			// Only process all properties on first view creation.
+			// Re-binds are handled by TableViewHolder.bind() via needsUpdate().
+			if (!viewInitialized) {
+				row.processProperties(this.properties);
+				viewInitialized = true;
+			}
 		}
 	}
 
@@ -248,33 +261,54 @@ public class TableViewRowProxy extends TiViewProxy
 
 	/**
 	 * Get item index in section.
+	 * Uses cached value to avoid O(n) indexOf() calls.
 	 *
 	 * @return Integer of index.
 	 */
 	public int getIndexInSection()
 	{
-		final TiViewProxy parent = getParent();
+		return this.indexInSection;
+	}
 
-		if (parent instanceof TableViewSectionProxy section) {
+	/**
+	 * Set item index in section.
+	 * Called by TableViewSectionProxy after row mutations.
+	 *
+	 * @param index Index in section.
+	 */
+	public void setIndexInSection(int index)
+	{
+		this.indexInSection = index;
+	}
 
-			return section.getRowIndex(this);
-		}
-
-		return -1;
+	/**
+	 * Override setParent to invalidate cached TableViewProxy reference.
+	 *
+	 * @param parent Parent proxy.
+	 */
+	@Override
+	public void setParent(TiViewProxy parent)
+	{
+		super.setParent(parent);
+		cachedTableViewProxy = null;
 	}
 
 	/**
 	 * Get related TableView proxy for item.
+	 * Uses cached reference to avoid parent chain walks.
 	 *
 	 * @return TableViewProxy
 	 */
 	public TableViewProxy getTableViewProxy()
 	{
-		TiViewProxy parent = getParent();
-		while (!(parent instanceof TableViewProxy) && parent != null) {
-			parent = parent.getParent();
+		if (cachedTableViewProxy == null) {
+			TiViewProxy parent = getParent();
+			while (!(parent instanceof TableViewProxy) && parent != null) {
+				parent = parent.getParent();
+			}
+			cachedTableViewProxy = (TableViewProxy) parent;
 		}
-		return (TableViewProxy) parent;
+		return cachedTableViewProxy;
 	}
 
 	/**
@@ -460,6 +494,7 @@ public class TableViewRowProxy extends TiViewProxy
 	public void releaseViews()
 	{
 		this.holder = null;
+		this.viewInitialized = false;
 
 		final KrollDict properties = getProperties();
 
