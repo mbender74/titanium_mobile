@@ -66,9 +66,6 @@ public class TableViewRowProxy extends TiViewProxy
 	// Cached index in section to avoid O(n) indexOf() calls.
 	private int indexInSection = -1;
 
-	// Track whether the row view has been fully initialized with processProperties.
-	private boolean viewInitialized = false;
-
 	// FIXME: On iOS the same row can be added to a table multiple times.
 	//        Due to constraints, we need to create a new proxy and track changes.
 	private final List<WeakReference<TableViewRowProxy>> clones = new ArrayList<>(0);
@@ -235,12 +232,8 @@ public class TableViewRowProxy extends TiViewProxy
 			// Reset opacity of view.
 			nativeView.setAlpha(1.0f);
 
-			// Only process all properties on first view creation.
-			// Re-binds are handled by TableViewHolder.bind() via needsUpdate().
-			if (!viewInitialized) {
-				row.processProperties(this.properties);
-				viewInitialized = true;
-			}
+			// Apply proxy properties.
+			row.processProperties(this.properties);
 		}
 	}
 
@@ -494,7 +487,6 @@ public class TableViewRowProxy extends TiViewProxy
 	public void releaseViews()
 	{
 		this.holder = null;
-		this.viewInitialized = false;
 
 		final KrollDict properties = getProperties();
 
