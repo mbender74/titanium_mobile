@@ -44,7 +44,12 @@ public class TiLoadImageManager
 	private TiLoadImageManager()
 	{
 		handler = new Handler(Looper.getMainLooper());
-		threadPool = Executors.newFixedThreadPool(Math.max(Runtime.getRuntime().availableProcessors(), 2));
+		// Use 2 threads instead of availableProcessors() to limit concurrent bitmap decodes.
+		// With 8+ threads, many images decode simultaneously and all post setImageBitmap()
+		// to the UI thread at once, causing a burst of GPU texture uploads that triggers
+		// "HWUI: Image decoding logging dropped!" warnings. 2 threads provides enough
+		// parallelism for smooth loading while throttling texture uploads to a manageable rate.
+		threadPool = Executors.newFixedThreadPool(2);
 	}
 
 	public void load(TiDrawableReference drawableRef, TiLoadImageManager.Listener listener)

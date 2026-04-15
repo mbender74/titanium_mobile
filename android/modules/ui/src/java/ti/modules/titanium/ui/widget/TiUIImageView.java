@@ -67,6 +67,7 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 	private TiDrawableReference defaultImageSource;
 	private TiLoadImageManager.Listener loadImageListener;
 	private Bitmap currentBitmap;
+	private boolean isLoadingActualImage;
 	private final Object releasedLock = new Object();
 
 	private final Handler mainHandler = new Handler(Looper.getMainLooper(), this);
@@ -102,6 +103,7 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 				}
 
 				// Show decoded bitmap in ImageView.
+				isLoadingActualImage = false;
 				setImage(imageInfo.getBitmap(), isAutoRotateEnabled() ? imageInfo.getOrientation() : null);
 				if (!firedLoad) {
 					fireLoad(TiC.PROPERTY_IMAGE);
@@ -112,6 +114,7 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 			@Override
 			public void onLoadImageFailed(@NonNull TiDrawableReference drawableRef)
 			{
+				isLoadingActualImage = false;
 				String message = "Failed to load image.";
 				Log.w(TAG, message, Log.DEBUG_MODE);
 				fireError(message, drawableRef.toString());
@@ -681,18 +684,21 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 			var key = imageref.getKey();
 			Bitmap bitmap = TiImageCache.getBitmap(key);
 			if (bitmap != null) {
+				isLoadingActualImage = false;
 				setImage(bitmap, isAutoRotateEnabled() ? TiImageCache.getOrientation(key) : null);
 				if (!firedLoad) {
 					fireLoad(TiC.PROPERTY_IMAGE);
 					firedLoad = true;
 				}
 			} else {
-				// Actual image not cached yet - show default image while loading.
-				if (defaultImageSource != null) {
-					setDefaultImage();
-				} else {
-					setImage(null, null);
-				}
+				// Actual image not cached yet - start async load.
+				// Skip showing defaultImage: the actual image will arrive
+				// soon via onLoadImageFinished, so showing defaultImage first
+				// would cause a redundant GPU texture upload
+				// (defaultImage texture -> actualImage texture). Instead, clear
+				// the view and let the actual image appear directly.
+				isLoadingActualImage = true;
+				setImage(null, null);
 				TiLoadImageManager.getInstance().load(imageref, loadImageListener);
 			}
 		} else {
