@@ -16,12 +16,17 @@ import org.appcelerator.kroll.annotations.Kroll;
 import org.appcelerator.kroll.common.Log;
 import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.proxy.TiViewProxy;
+import org.appcelerator.titanium.TiDimension;
+import org.appcelerator.titanium.util.TiConvert;
+import org.appcelerator.titanium.view.TiBorderWrapperView;
 import org.appcelerator.titanium.view.TiUIView;
 
 import android.app.Activity;
+import android.graphics.Color;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
 
 import ti.modules.titanium.ui.widget.TiView;
 import ti.modules.titanium.ui.widget.tableview.TableViewHolder;
@@ -65,6 +70,9 @@ public class TableViewRowProxy extends TiViewProxy
 
 	// Cached index in section to avoid O(n) indexOf() calls.
 	private int indexInSection = -1;
+
+	// Track whether the row view has been fully initialized with processProperties.
+	private boolean viewInitialized = false;
 
 	// FIXME: On iOS the same row can be added to a table multiple times.
 	//        Due to constraints, we need to create a new proxy and track changes.
@@ -229,12 +237,117 @@ public class TableViewRowProxy extends TiViewProxy
 			// Grab latest `nativeView`.
 			final View nativeView = row.getNativeView();
 
-			// Reset opacity of view.
-			nativeView.setAlpha(1.0f);
-
-			// Apply proxy properties.
-			row.processProperties(this.properties);
+			// Only process all properties on first view creation.
+			// Re-binds are handled by TableViewHolder.bind() via needsUpdate(),
+			// plus applyRebindProperties() for visual state that bind() doesn't cover.
+			if (!viewInitialized) {
+				row.processProperties(this.properties);
+				viewInitialized = true;
+			} else {
+				applyRebindProperties(row, nativeView);
+			}
 		}
+	}
+
+	/**
+	 * Re-apply visual properties that processProperties() would handle on first bind
+	 * but are skipped on rebind when viewInitialized is true.
+	 * Prevents stale visual state (opacity, visibility, transforms, borders)
+	 * when a TableViewHolder is recycled and bound to a different row proxy.
+	 *
+	 * @param row        The RowView instance.
+	 * @param nativeView The native view (holder's container).
+	 */
+	private void applyRebindProperties(RowView row, View nativeView)
+	{
+		final KrollDict d = this.properties;
+
+		// Opacity: apply proxy value or default to fully opaque.
+		if (d.containsKeyAndNotNull(TiC.PROPERTY_OPACITY)) {
+			row.setOpacity(TiConvert.toFloat(d, TiC.PROPERTY_OPACITY, 1f));
+		} else {
+			nativeView.setAlpha(1.0f);
+			final View outerView = row.getOuterView();
+			if (outerView != nativeView) {
+				outerView.setAlpha(1.0f);
+			}
+		}
+
+		// Visible: apply proxy value or default to visible.
+		// Note: TiUIView.setVisibility() is private, so we set directly on both views.
+		// This matches TiUIView behavior (sets on both borderView and nativeView).
+		final int visibility;
+		if (d.containsKeyAndNotNull(TiC.PROPERTY_VISIBLE)) {
+			visibility = TiConvert.toBoolean(d, TiC.PROPERTY_VISIBLE, true)
+				? View.VISIBLE : View.INVISIBLE;
+		} else {
+			visibility = View.VISIBLE;
+		}
+		nativeView.setVisibility(visibility);
+		{
+			final View outer = row.getOuterView();
+			if (outer != null && outer != nativeView) {
+				outer.setVisibility(visibility);
+			}
+		}
+
+		// Enabled: apply proxy value or default to enabled.
+		nativeView.setEnabled(!d.containsKeyAndNotNull(TiC.PROPERTY_ENABLED)
+			|| TiConvert.toBoolean(d, TiC.PROPERTY_ENABLED, true));
+
+		// Elevation: apply proxy value or reset to 0.
+		ViewCompat.setElevation(row.getOuterView(),
+			d.containsKeyAndNotNull(TiC.PROPERTY_ELEVATION)
+				? TiConvert.toFloat(d, TiC.PROPERTY_ELEVATION) : 0f);
+
+		// Border properties: re-apply to the holder's TiBorderWrapperView.
+		final View outerView = row.getOuterView();
+		if (outerView instanceof TiBorderWrapperView) {
+			final TiBorderWrapperView borderView = (TiBorderWrapperView) outerView;
+
+			if (d.containsKey(TiC.PROPERTY_BORDER_RADIUS)) {
+				borderView.setRadius(d.get(TiC.PROPERTY_BORDER_RADIUS));
+			} else {
+				borderView.setRadius(0);
+			}
+
+			if (d.containsKeyAndNotNull(TiC.PROPERTY_BORDER_COLOR)) {
+				borderView.setColor(
+					TiConvert.toColor(d, TiC.PROPERTY_BORDER_COLOR, getActivity()));
+			} else {
+				borderView.setColor(Color.TRANSPARENT);
+			}
+
+			Object borderWidthObj = d.containsKey(TiC.PROPERTY_BORDER_WIDTH)
+				? d.get(TiC.PROPERTY_BORDER_WIDTH) : 0;
+			TiDimension widthDim = TiConvert.toTiDimension(
+				borderWidthObj, TiDimension.TYPE_WIDTH);
+			if (widthDim != null) {
+				borderView.setBorderWidth((float) widthDim.getPixels(borderView));
+			} else {
+				borderView.setBorderWidth(0f);
+			}
+		}
+
+		// Transform properties: apply proxy value or reset to default.
+		ViewCompat.setRotation(nativeView,
+			d.containsKeyAndNotNull(TiC.PROPERTY_ROTATION)
+				? TiConvert.toFloat(d, TiC.PROPERTY_ROTATION) : 0f);
+		ViewCompat.setScaleX(nativeView,
+			d.containsKeyAndNotNull(TiC.PROPERTY_SCALE_X)
+				? TiConvert.toFloat(d, TiC.PROPERTY_SCALE_X) : 1f);
+		ViewCompat.setScaleY(nativeView,
+			d.containsKeyAndNotNull(TiC.PROPERTY_SCALE_Y)
+				? TiConvert.toFloat(d, TiC.PROPERTY_SCALE_Y) : 1f);
+		ViewCompat.setTranslationX(nativeView,
+			d.containsKeyAndNotNull(TiC.PROPERTY_TRANSLATION_X)
+				? TiConvert.toFloat(d, TiC.PROPERTY_TRANSLATION_X) : 0f);
+		ViewCompat.setTranslationY(nativeView,
+			d.containsKeyAndNotNull(TiC.PROPERTY_TRANSLATION_Y)
+				? TiConvert.toFloat(d, TiC.PROPERTY_TRANSLATION_Y) : 0f);
+		ViewCompat.setTranslationZ(nativeView,
+			d.containsKeyAndNotNull(TiC.PROPERTY_TRANSLATION_Z)
+				? TiConvert.toFloat(d, TiC.PROPERTY_TRANSLATION_Z) : 0f);
 	}
 
 	/**
@@ -487,6 +600,7 @@ public class TableViewRowProxy extends TiViewProxy
 	public void releaseViews()
 	{
 		this.holder = null;
+		this.viewInitialized = false;
 
 		final KrollDict properties = getProperties();
 
