@@ -650,22 +650,23 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 
 	private void setImageInternal()
 	{
-		// Set default image or clear previous image first.
-		if (defaultImageSource != null) {
-			setDefaultImage();
-		} else {
-			setImage(null, null);
-		}
-
 		if (imageSources == null || imageSources.size() == 0 || imageSources.get(0) == null
 			|| imageSources.get(0).isTypeNull()) {
+			// No actual image - show default or clear.
+			if (defaultImageSource != null) {
+				setDefaultImage();
+			} else {
+				setImage(null, null);
+			}
 			return;
 		}
 
 		if (imageSources.size() == 1) {
 			TiDrawableReference imageref = imageSources.get(0);
 
-			// Check if the image is cached in memory
+			// Check if the actual image is cached in memory.
+			// If it is, set it directly and skip the default image.
+			// This avoids a redundant texture upload: defaultImage -> actualImage.
 			var key = imageref.getKey();
 			Bitmap bitmap = TiImageCache.getBitmap(key);
 			if (bitmap != null) {
@@ -675,9 +676,21 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 					firedLoad = true;
 				}
 			} else {
+				// Actual image not cached yet - show default image while loading.
+				if (defaultImageSource != null) {
+					setDefaultImage();
+				} else {
+					setImage(null, null);
+				}
 				TiLoadImageManager.getInstance().load(imageref, loadImageListener);
 			}
 		} else {
+			// Multiple images (animation) - show default first.
+			if (defaultImageSource != null) {
+				setDefaultImage();
+			} else {
+				setImage(null, null);
+			}
 			setImages();
 		}
 	}
