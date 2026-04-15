@@ -66,6 +66,7 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 	private ArrayList<TiDrawableReference> imageSources;
 	private TiDrawableReference defaultImageSource;
 	private TiLoadImageManager.Listener loadImageListener;
+	private Bitmap currentBitmap;
 	private final Object releasedLock = new Object();
 
 	private final Handler mainHandler = new Handler(Looper.getMainLooper(), this);
@@ -203,6 +204,16 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 			});
 			return;
 		}
+
+		// Skip redundant setImageBitmap() calls when the bitmap hasn't changed.
+		// Each setImageBitmap() triggers HWUI to upload the bitmap as a GPU texture.
+		// During TableView scrolling, rows are recycled and re-bound, often with the
+		// same image. Skipping the call avoids "HWUI: Image decoding logging dropped!"
+		// warnings caused by unnecessary texture uploads.
+		if (bitmap == currentBitmap) {
+			return;
+		}
+		currentBitmap = bitmap;
 
 		TiImageView view = getView();
 		if (view != null) {
