@@ -134,9 +134,10 @@ public class TiBackgroundDrawable extends StateListDrawable
 	public void releaseDelegate()
 	{
 		if (background != null) {
-			if (background instanceof BitmapDrawable) {
-				((BitmapDrawable) background).getBitmap().recycle();
-			}
+			// Do not recycle bitmap here. HWUI may still reference it as a GPU texture.
+			// Explicit recycle() forces HWUI to re-decode the bitmap on next draw,
+			// causing "Image decoding logging dropped!" warnings and scroll jank.
+			// Let GC reclaim the bitmap naturally when no references remain.
 			background.setCallback(null);
 			background = null;
 		}
