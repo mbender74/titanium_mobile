@@ -878,8 +878,7 @@ public class TiUIHelper
 	{
 		Rect pad = new Rect();
 		BitmapFactory.Options opts = new BitmapFactory.Options();
-		opts.inPurgeable = true;
-		opts.inInputShareable = true;
+		// Removed inPurgeable - deprecated since API 21, causes HWUI re-decoding
 
 		Bitmap b = null;
 		try {
@@ -899,8 +898,7 @@ public class TiUIHelper
 	{
 		Rect pad = new Rect();
 		BitmapFactory.Options opts = new BitmapFactory.Options();
-		opts.inPurgeable = true;
-		opts.inInputShareable = true;
+		// Removed inPurgeable - deprecated since API 21, causes HWUI re-decoding
 		DisplayMetrics dm = new DisplayMetrics();
 		dm.setToDefaults();
 		opts.inDensity = DisplayMetrics.DENSITY_MEDIUM;
@@ -1016,8 +1014,6 @@ public class TiUIHelper
 	public static Bitmap getResourceBitmap(int res_id)
 	{
 		BitmapFactory.Options opts = new BitmapFactory.Options();
-		opts.inPurgeable = true;
-		opts.inInputShareable = true;
 
 		Bitmap bitmap = null;
 		try {

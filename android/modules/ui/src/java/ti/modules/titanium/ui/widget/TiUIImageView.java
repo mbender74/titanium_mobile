@@ -688,10 +688,34 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 			setImage(null, null);
 			return;
 		}
-		// Have to set default image in the UI thread to make sure it shows before the image
-		// is ready. Don't need to retry decode because we don't want to block UI.
-		TiExifOrientation orientation = isAutoRotateEnabled() ? defaultImageSource.getExifOrientation() : null;
-		setImage(defaultImageSource.getBitmap(false), orientation);
+		// Try cache first (synchronous but fast for cached bitmaps)
+		var key = defaultImageSource.getKey();
+		Bitmap cachedBitmap = TiImageCache.getBitmap(key);
+		if (cachedBitmap != null) {
+			TiExifOrientation orientation = isAutoRotateEnabled() ? TiImageCache.getOrientation(key) : null;
+			setImage(cachedBitmap, orientation);
+			return;
+		}
+		// Load default image asynchronously to avoid blocking UI thread with decoding
+		TiLoadImageManager.getInstance().load(defaultImageSource, new TiLoadImageManager.Listener() {
+			@Override
+			public void onLoadImageFinished(@NonNull TiDrawableReference ref, @NonNull TiImageInfo imageInfo)
+			{
+				if (defaultImageSource != null && defaultImageSource.equals(ref)) {
+					Bitmap bitmap = imageInfo.getBitmap();
+					if (bitmap != null && !bitmap.isRecycled()) {
+						TiExifOrientation orientation = isAutoRotateEnabled()
+								? imageInfo.getOrientation() : null;
+						setImage(bitmap, orientation);
+					}
+				}
+			}
+
+			@Override
+			public void onLoadImageFailed(@NonNull TiDrawableReference ref)
+			{
+			}
+		});
 	}
 
 	@Override

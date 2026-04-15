@@ -395,8 +395,7 @@ public class TiDrawableReference
 		// Configure image decoding options.
 		BitmapFactory.Options opts = new BitmapFactory.Options();
 		opts.inSampleSize = 1;
-		opts.inInputShareable = true;
-		opts.inPurgeable = true;
+		// Removed inPurgeable - deprecated since API 21, causes HWUI re-decoding
 		opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
 		if (densityScaled) {
 			DisplayMetrics dm = new DisplayMetrics();
@@ -692,8 +691,7 @@ public class TiDrawableReference
 		Bitmap b = null;
 		try {
 			BitmapFactory.Options opts = new BitmapFactory.Options();
-			opts.inInputShareable = true;
-			opts.inPurgeable = true;
+			// Removed inPurgeable - deprecated since API 21, causes HWUI re-decoding
 			opts.inSampleSize = calcSampleSize(srcWidth, srcHeight, destWidth, destHeight);
 			if (Log.isDebugModeEnabled()) {
 				String sb = "Bitmap calcSampleSize results: inSampleSize="
@@ -897,7 +895,16 @@ public class TiDrawableReference
 		if (srcWidth <= 0 || srcHeight <= 0 || destWidth <= 0 || destHeight <= 0) {
 			return DEFAULT_SAMPLE_SIZE;
 		}
-		return Math.max(srcWidth / destWidth, srcHeight / destHeight);
+		// Round to nearest power of 2 for efficient BitmapFactory decoding.
+		int rawSample = Math.max(srcWidth / destWidth, srcHeight / destHeight);
+		if (rawSample <= 1) {
+			return 1;
+		}
+		int sampleSize = 1;
+		while (sampleSize * 2 <= rawSample) {
+			sampleSize *= 2;
+		}
+		return sampleSize;
 	}
 
 	/**
