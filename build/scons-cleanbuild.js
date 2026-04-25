@@ -18,6 +18,7 @@ program
 	.option('--symlink', 'If possible, symlink the SDK folder to destination rather than copying')
 	.option('-a, --all', 'Build a zipfile for every OS')
 	.option('-z, --skip-zip', 'Do not zip up the package, leaving folder contents under dist (typically used for local development)')
+	.option('--rebuild-tiverify', 'Rebuild the tiverify.xcframework from source before packaging iOS')
 	.parse(process.argv);
 
 async function main(program) {

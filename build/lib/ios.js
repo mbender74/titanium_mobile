@@ -23,6 +23,7 @@ export class IOS {
 		this.sdkVersion = options.sdkVersion;
 		this.gitHash = options.gitHash;
 		this.timestamp = options.timestamp;
+		this.shouldRebuildTiVerify = options.rebuildTiverify || false;
 	}
 
 	babelOptions() {
@@ -56,7 +57,11 @@ export class IOS {
 		return fs.remove(path.join(IOS_ROOT, 'TitaniumKit/build'));
 	}
 
-	build() {
+	async build() {
+		if (this.shouldRebuildTiVerify) {
+			await this._rebuildTiVerify();
+		}
+
 		console.log('Building TitaniumKit ...');
 
 		return new Promise((resolve, reject) => {
@@ -71,6 +76,26 @@ export class IOS {
 				}
 
 				console.log('TitaniumKit built successfully!');
+				resolve();
+			});
+		});
+	}
+
+	_rebuildTiVerify() {
+		console.log('Rebuilding tiverify.xcframework from source...');
+
+		return new Promise((resolve, reject) => {
+			const buildScript = path.join(ROOT_DIR, 'support/iphone/build_tiverify.sh');
+			const child = spawn(buildScript, [], { stdio: 'inherit' });
+			child.on('error', reject);
+			child.on('close', code => {
+				if (code) {
+					const err = new Error(`tiverify build exited with code ${code}`);
+					console.error(err);
+					return reject(err);
+				}
+
+				console.log('tiverify.xcframework rebuilt successfully!');
 				resolve();
 			});
 		});

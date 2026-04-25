@@ -234,6 +234,16 @@ npm ci
 npm run cleanbuild -- [platform1] [platform2] --android-sdk /opt/android-sdk /Users/build/android-sdk-macosx
 ```
 
+### Rebuilding tiverify.xcframework
+
+The iOS build includes a pre-built `tiverify.xcframework` that handles runtime decryption of encrypted JavaScript assets. If you need to rebuild this framework from the source in `iphone/lib/tiverify_src/`, use the `--rebuild-tiverify` flag:
+
+```bash
+npm run cleanbuild -- ios --rebuild-tiverify
+```
+
+This compiles `TiVerify.m` for all three platform slices (iOS device, iOS simulator, Mac Catalyst) and assembles a new `tiverify.xcframework` in `iphone/lib/`. The rebuild runs before the TitaniumKit build step.
+
 ### Unit tests
 
 We have a [unit test suite](tests/) intended to run across all supported platforms.

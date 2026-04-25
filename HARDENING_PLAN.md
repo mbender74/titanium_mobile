@@ -400,6 +400,30 @@ The JS kernel contained an em-dash character (`—`) in a comment, which encoded
 | 4 | XOR-mask data blob (4C) | Medium | Low | Requires `titanium_prep` rewrite (tiverify now has source) |
 | 5C | Strip ObjC metadata sections | Medium | Low | No blocker — Xcode build phase changes only |
 
+#### tiverify.xcframework Rebuild — IMPLEMENTED
+
+The prebuilt `tiverify.xcframework` has been reverse-engineered and reimplemented from source. The new implementation in `iphone/lib/tiverify_src/TiVerify.m` provides the same `filterDataInRange(NSData*, NSRange)` API using CommonCrypto AES-128-CBC decryption with PKCS7 padding.
+
+A build script (`support/iphone/build_tiverify.sh`) compiles `TiVerify.m` for all three platform slices (iOS device arm64, iOS Simulator arm64+x86_64, Mac Catalyst arm64+x86_64) and assembles them into the xcframework.
+
+The rebuild is integrated into the SDK build system via the `--rebuild-tiverify` flag:
+
+```bash
+npm run cleanbuild -- ios --rebuild-tiverify
+```
+
+This recompiles `TiVerify.m` from source and replaces `iphone/lib/tiverify.xcframework` before the TitaniumKit build step.
+
+**Files added:**
+- `iphone/lib/tiverify_src/TiVerify.h` — Public header with API documentation
+- `iphone/lib/tiverify_src/TiVerify.m` — Reimplementation of `filterDataInRange` using CommonCrypto
+- `support/iphone/build_tiverify.sh` — Build script that compiles for all slices and creates the xcframework
+
+**Files changed:**
+- `build/scons-cleanbuild.js` — Added `--rebuild-tiverify` CLI option
+- `build/lib/ios.js` — Added `_rebuildTiVerify()` method, called during `build()` when flag is set
+- `iphone/lib/tiverify.xcframework/` — Rebuilt from source (identical API, now reproducible)
+
 ---
 
 ## Recommended Priority

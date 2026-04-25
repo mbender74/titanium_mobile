@@ -1,0 +1,3 @@
+# Build artifacts - use build_tiverify.sh or npm run cleanbuild -- --rebuild-tiverify instead
+*.o
+*.a
