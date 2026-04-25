@@ -296,20 +296,22 @@ A new CLI flag `--skip-js-encrypt` is available to explicitly disable encryption
 
 ## Prebuilt Binary Dependencies
 
-Two critical components in the encryption pipeline are **prebuilt binaries with no available source code**. This is the single biggest blocker for implementing most hardening measures:
+Two critical components in the encryption pipeline were prebuilt binaries with no available source code. `tiverify.xcframework` has been reverse-engineered and reimplemented; `titanium_prep` remains a prebuilt binary:
 
 | Binary | Location | Purpose | Source available? |
 |--------|----------|---------|-------------------|
 | `titanium_prep` | `support/iphone/titanium_prep` | Build-time tool that generates `data[]`, `ranges[]`, key+IV, and `initWithObjectsAndKeys:` dictionary. Reads `/dev/urandom` for key generation. | No |
-| `tiverify.xcframework` | `iphone/lib/tiverify.xcframework/` | Runtime library providing `filterDataInRange(NSData* thedata, NSRange range)` — performs AES-128-CBC decryption extracting key+IV from end of data | No |
+| `tiverify.xcframework` | `iphone/lib/tiverify.xcframework/` | Runtime library providing `filterDataInRange(NSData* thedata, NSRange range)` — performs AES-128-CBC decryption extracting key+IV from end of data | **Yes** — reimplemented from scratch in `iphone/lib/tiverify_src/` |
 
 **Implications:**
-- **Measure 1** (key removal) requires rewriting `titanium_prep` to change key output format, and rebuilding `tiverify.xcframework` to accept derived keys or implement key derivation internally.
-- **Measure 2** (string obfuscation) approaches B/C require rewriting `titanium_prep` to output hash keys instead of string keys.
-- **Measure 4** (data obfuscation) requires modifying `titanium_prep` output format and potentially `tiverify.xcframework`.
-- **Measure 5** (stripping) and **Measure 6** (runtime checks) can be implemented without touching these binaries.
+- **Measure 1** (key removal): `tiverify.xcframework` can now be modified to accept key+IV as separate parameters or implement key derivation internally. `titanium_prep` still needs to be reverse-engineered or reimplemented.
+- **Measure 2** (string obfuscation) approaches B/C: Still require rewriting `titanium_prep` to output hash keys instead of string keys.
+- **Measure 4** (data obfuscation): `tiverify.xcframework` can now be modified (e.g., to accept XOR mask keys). `titanium_prep` still needs modification.
+- **Measure 5** (stripping) and **Measure 6** (runtime checks): Can be implemented without touching these binaries.
 
-**Recommendation:** Before implementing Measures 1, 2, or 4, the `titanium_prep` and `tiverify` binaries must be reverse-engineered and reimplemented with available source, or replaced entirely with new implementations whose source is available for modification.
+**`tiverify.xcframework` reimplementation:** The original binary was reverse-engineered by analyzing the exported symbol `_filterDataInRange`, tracing the disassembly across x86_64 and arm64 slices, and identifying the use of Apple's CommonCrypto `CCCrypt` function. The reimplementation in `iphone/lib/tiverify_src/TiVerify.m` is functionally identical: AES-128-CBC decryption with PKCS7 padding, key and IV extracted from the last 32 bytes of the data blob. The xcframework has been rebuilt for ios-arm64, ios-arm64_x86_64-maccatalyst, and ios-arm64_x86_64-simulator slices.
+
+**Remaining blocker:** `titanium_prep` must still be reverse-engineered or reimplemented before Measures 1, 2B/C, and 4 can be implemented.
 
 ---
 
@@ -392,11 +394,11 @@ The JS kernel contained an em-dash character (`—`) in a comment, which encoded
 
 | Priority | Measure | Impact | Effort | Blocker |
 |----------|---------|--------|--------|---------|
-| 1 | Remove key/IV from binary (1C: White-box AES) | Critical | High | Requires `tiverify` + `titanium_prep` rewrite |
+| 1 | Remove key/IV from binary (1C: White-box AES) | Critical | High | Requires `titanium_prep` rewrite (tiverify now has source) |
 | 2 | Hash-based string lookup (2B/2C) | High | Medium | Requires `titanium_prep` rewrite |
-| 4 | Encrypt NSRange array (4B) | Medium | Medium | Requires `titanium_prep` rewrite |
-| 4 | XOR-mask data blob (4C) | Medium | Low | Requires `titanium_prep` rewrite |
-| 5C | Strip ObjC metadata sections | Medium | Low | Xcode build phase changes only |
+| 4 | Encrypt NSRange array (4B) | Medium | Medium | Requires `titanium_prep` rewrite (tiverify now has source) |
+| 4 | XOR-mask data blob (4C) | Medium | Low | Requires `titanium_prep` rewrite (tiverify now has source) |
+| 5C | Strip ObjC metadata sections | Medium | Low | No blocker — Xcode build phase changes only |
 
 ---
 
@@ -404,11 +406,11 @@ The JS kernel contained an em-dash character (`—`) in a comment, which encoded
 
 | Priority | Measure | Impact | Effort | Blocker |
 |----------|---------|--------|--------|---------|
-| ~~1~~ | ~~Remove key/IV from binary (1C: White-box AES)~~ | Critical | High | Requires `tiverify` + `titanium_prep` rewrite |
+| ~~1~~ | ~~Remove key/IV from binary (1C: White-box AES)~~ | Critical | High | ~~Requires tiverify + titanium_prep rewrite~~ Requires titanium_prep rewrite only (tiverify now has source) |
 | ~~2~~ | ~~Obfuscate string constants (2A: Runtime string construction)~~ | High | ~~Medium~~ Low | ~~Requires `titanium_prep` rewrite~~ No blocker — implemented as post-processing |
 | ~~3~~ | ~~Remove `_index_.json` (Measure 3)~~ | High | ~~Low~~ | ~~No blocker — pure JS/ObjC changes~~ Implemented |
-| 4 | Encrypt NSRange array (4B) | Medium | Medium | Requires `titanium_prep` rewrite |
-| 5 | XOR-mask data blob (4C) | Medium | Low | Requires `titanium_prep` rewrite |
+| 4 | Encrypt NSRange array (4B) | Medium | Medium | Requires `titanium_prep` rewrite (tiverify now has source) |
+| 5 | XOR-mask data blob (4C) | Medium | Low | Requires `titanium_prep` rewrite (tiverify now has source) |
 | ~~6~~ | ~~Strip/obfuscate metadata (5A: Class names)~~ | Medium | ~~Low~~ | ~~No blocker — build config changes~~ Implemented |
 | ~~7~~ | ~~Anti-debugging check (6A)~~ | Low | ~~Low~~ | ~~No blocker — ObjC code changes~~ Implemented |
 
