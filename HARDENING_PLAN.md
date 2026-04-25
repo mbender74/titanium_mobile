@@ -397,8 +397,35 @@ The JS kernel contained an em-dash character (`—`) in a comment, which encoded
 | 1 | Remove key/IV from binary (1C: White-box AES) | Critical | Medium | No blocker — titanium_prep now has source |
 | 2 | Hash-based string lookup (2B/2C) | High | Medium | No blocker — titanium_prep now has source |
 | 4 | Encrypt NSRange array (4B) | Medium | Medium | No blocker — titanium_prep now has source |
-| 4 | XOR-mask data blob (4C) | Medium | Low | No blocker — titanium_prep now has source |
-| 5C | Strip ObjC metadata sections | Medium | Low | No blocker — Xcode build phase changes only |
+| ~~4~~ | ~~XOR-mask data blob (4C)~~ | Medium | ~~Low~~ | ~~No blocker~~ Implemented |
+| ~~5C~~ | ~~Strip ObjC metadata sections~~ | Medium | ~~Low~~ | ~~No blocker~~ Documented as manual step |
+
+#### Measure 4C: XOR-Mask Data Blob — IMPLEMENTED
+
+The `data[]` byte array is now XOR-masked with a random 16-byte key (`xmask[]`) before being embedded in the binary. The templates XOR-unmask the data before passing it to `filterDataInRange`. This defeats entropy-based detection — the masked data appears as uniform random bytes rather than showing the characteristic high-entropy transition that reveals the encrypted payload boundary.
+
+**How it works:**
+1. `titanium_prep.js` generates a random 16-byte XOR mask key and applies it cyclically over the entire data blob (encrypted payloads + key + IV)
+2. The mask key is output as `static UInt8 xmask[]` in the generated ObjC code
+3. `ApplicationRouting.m` template XOR-unmasks the data into a mutable buffer before calling `filterDataInRange`
+4. Module templates (`ModuleAssets.m.ejs`) do the same via updated return expressions
+
+**Files changed:**
+- `support/iphone/titanium_prep.js` — Generates `xmask[]` and XOR-masks the data blob
+- `iphone/templates/build/ApplicationRouting.m` — XOR-unmasks data before decryption
+- `iphone/cli/commands/_buildModule.js` — Updated return expressions for module assets
+
+#### Measure 5C: Strip ObjC Metadata — Documented
+
+The `__objc_methname` and `__objc_classname` sections reveal method and class names in the binary. Removing these sections can break ObjC runtime message dispatch, so they cannot be stripped automatically. Production builds already use `DEPLOYMENT_POSTPROCESSING = YES` and `COPY_PHASE_STRIP = YES` (Release configuration), which removes debug symbols.
+
+For aggressive metadata stripping, developers can add a post-build script phase:
+```bash
+xcrun strip -x -S "$TARGET_BUILD_DIR/$PRODUCT_NAME.app/$PRODUCT_NAME"
+```
+This should be tested carefully, as it may break `objc_msgSend` dispatch for dynamically-constructed selectors.
+
+**Note:** The existing `_obfuscateStringKeys()` post-processing already removes JS filenames from `__cfstring`/`__cstring` sections. The remaining `__objc_methname` entries are standard ObjC method selectors (`resolveAppAsset:`, `moduleAsset`, etc.) which don't directly reveal JS file contents.
 
 #### titanium_prep Node.js Replacement — IMPLEMENTED
 
@@ -453,8 +480,8 @@ This recompiles `TiVerify.m` from source and replaces `iphone/lib/tiverify.xcfra
 | ~~2~~ | ~~Obfuscate string constants (2A: Runtime string construction)~~ | High | ~~Medium~~ Low | ~~Requires `titanium_prep` rewrite~~ No blocker — implemented as post-processing |
 | ~~3~~ | ~~Remove `_index_.json` (Measure 3)~~ | High | ~~Low~~ | ~~No blocker — pure JS/ObjC changes~~ Implemented |
 | 4 | Encrypt NSRange array (4B) | Medium | Medium | No blocker — titanium_prep now has source |
-| 5 | XOR-mask data blob (4C) | Medium | Low | No blocker — titanium_prep now has source |
-| ~~6~~ | ~~Strip/obfuscate metadata (5A: Class names)~~ | Medium | ~~Low~~ | ~~No blocker — build config changes~~ Implemented |
+| ~~5~~ | ~~XOR-mask data blob (4C)~~ | Medium | ~~Low~~ | ~~No blocker~~ Implemented |
+| ~~6~~ | ~~Strip/obfuscate metadata (5A + 5C)~~ | Medium | ~~Low~~ | ~~No blocker~~ Implemented (5A) / Documented (5C) |
 | ~~7~~ | ~~Anti-debugging check (6A)~~ | Low | ~~Low~~ | ~~No blocker — ObjC code changes~~ Implemented |
 
 ## Effectiveness Assessment

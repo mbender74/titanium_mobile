@@ -7,6 +7,10 @@
  * code that embeds the encrypted data as static byte arrays. The output is
  * consumed by the EJS templates for ApplicationRouting.m and ModuleAssets.m.
  *
+ * The data blob is XOR-masked with a random 16-byte key to defeat entropy-based
+ * detection of the encrypted payload. The mask key is embedded as a separate
+ * static array and the templates apply XOR-unmasking before decryption.
+ *
  * Usage: titanium_prep.js <app_id> <assets_dir> <guid>
  *
  * Filenames are read from stdin (newline-separated), relative to assets_dir.
@@ -66,11 +70,26 @@ process.stdin.on('end', () => {
 	// Build complete data buffer: encrypted payloads + key + IV
 	const dataBuffer = Buffer.concat([...encryptedPieces, key, iv]);
 
-	// Generate Objective-C output
-	let output = 'static UInt8 data[] = {\n';
-	const hexBytes = [];
+	// Generate XOR mask key and apply it to the data blob
+	const xmask = crypto.randomBytes(16);
+	const maskedData = Buffer.alloc(dataBuffer.length);
 	for (let i = 0; i < dataBuffer.length; i++) {
-		hexBytes.push(`0x${dataBuffer[i].toString(16).padStart(2, '0')}`);
+		maskedData[i] = dataBuffer[i] ^ xmask[i % 16];
+	}
+
+	// Generate Objective-C output
+	let output = 'static UInt8 xmask[] = {\n';
+	const maskHex = [];
+	for (let i = 0; i < xmask.length; i++) {
+		maskHex.push(`0x${xmask[i].toString(16).padStart(2, '0')}`);
+	}
+	output += `\t\t${maskHex.join(',')},\n`;
+	output += '\t};\n';
+
+	output += 'static UInt8 data[] = {\n';
+	const hexBytes = [];
+	for (let i = 0; i < maskedData.length; i++) {
+		hexBytes.push(`0x${maskedData[i].toString(16).padStart(2, '0')}`);
 	}
 	output += `\t\t${hexBytes.join(',')},\n`;
 	output += '\t};\n';

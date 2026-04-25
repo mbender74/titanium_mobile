@@ -48,7 +48,14 @@ static BOOL _isDebuggerAttached(void)
   if (index == nil) {
     return nil;
   }
-  return filterDataInRange([NSData dataWithBytesNoCopy:data length:sizeof(data) freeWhenDone:NO], ranges[index.integerValue]);
+  // XOR-unmask the data blob before decryption
+  NSUInteger dataLen = sizeof(data);
+  NSMutableData *unmasked = [NSMutableData dataWithLength:dataLen];
+  UInt8 *outBytes = [unmasked mutableBytes];
+  for (NSUInteger i = 0; i < dataLen; i++) {
+    outBytes[i] = data[i] ^ xmask[i % sizeof(xmask)];
+  }
+  return filterDataInRange(unmasked, ranges[index.integerValue]);
 }
 
 @end

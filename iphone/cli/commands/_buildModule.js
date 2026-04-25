@@ -550,10 +550,10 @@ FRAMEWORK_SEARCH_PATHS = $(inherited) "$(TITANIUM_SDK)/iphone/Frameworks/**"`);
 			jsFile = path.join(this.assetsDir, moduleJS),
 			renderData = {
 				moduleIdAsIdentifier: this.moduleIdAsIdentifier,
-				mainEncryptedAssetReturn: 'return filterDataInRange([NSData dataWithBytesNoCopy:data length:sizeof(data) freeWhenDone:NO], ranges[0]);',
+				mainEncryptedAssetReturn: 'NSUInteger dlen = sizeof(data); NSMutableData *um = [NSMutableData dataWithLength:dlen]; UInt8 *ob = [um mutableBytes]; for (NSUInteger i = 0; i < dlen; i++) { ob[i] = data[i] ^ xmask[i % sizeof(xmask)]; } return filterDataInRange(um, ranges[0]);',
 				allEncryptedAssetsReturn: 'NSNumber *index = [map objectForKey:path];'
 					+ '\n  if (index == nil) {\n    return nil;\n  }'
-					+ '\n  return filterDataInRange([NSData dataWithBytesNoCopy:data length:sizeof(data) freeWhenDone:NO], ranges[index.integerValue]);'
+					+ '\n  NSUInteger dlen2 = sizeof(data); NSMutableData *um2 = [NSMutableData dataWithLength:dlen2]; UInt8 *ob2 = [um2 mutableBytes]; for (NSUInteger i = 0; i < dlen2; i++) { ob2[i] = data[i] ^ xmask[i % sizeof(xmask)]; } return filterDataInRange(um2, ranges[index.integerValue]);'
 			},
 			titaniumPrepHook = this.cli.createHook('build.ios.titaniumprep', this, function (exe, args, opts, done) {
 				const jsFilesToEncrypt = opts.jsFiles,
