@@ -184,7 +184,7 @@
 {
   if (moduleAssets == nil) {
     NSString *moduleName_ = [NSString stringWithCString:class_getName([self class]) encoding:NSUTF8StringEncoding];
-    NSString *moduleAsset = [NSString stringWithFormat:@"%@Assets", moduleName_];
+    NSString *moduleAsset = [NSString stringWithFormat:@"%@_T5A", moduleName_];
     id cls = NSClassFromString(moduleAsset);
     if (cls != nil) {
       moduleAssets = [[cls alloc] init];

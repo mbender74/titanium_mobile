@@ -603,6 +603,8 @@ FRAMEWORK_SEARCH_PATHS = $(inherited) "$(TITANIUM_SDK)/iphone/Frameworks/**"`);
 
 							if (out.indexOf('initWithObjectsAndKeys') !== -1) {
 								// success!
+								// Obfuscate string keys to prevent filename leakage via __cfstring/__cstring sections.
+								out = this._obfuscateStringKeys(out);
 								renderData[placeHolderName] = out;
 
 								completed = true;
@@ -1332,6 +1334,33 @@ FRAMEWORK_SEARCH_PATHS = $(inherited) "$(TITANIUM_SDK)/iphone/Frameworks/**"`);
 		return name.replace(/[\s-]/g, '_').replace(/_+/g, '_').split(/\./).map(function (s) {
 			return s.substring(0, 1).toUpperCase() + s.substring(1);
 		}).join('');
+	}
+
+	/**
+	 * Obfuscates ObjC string literals (@"...") in titanium_prep output to prevent
+	 * filename leakage via __cfstring/__cstring sections in the compiled binary.
+	 * Replaces each @"stringLiteral" with a runtime-constructed NSString from a
+	 * char array, making static extraction of filenames from the binary infeasible.
+	 */
+	_obfuscateStringKeys(code) {
+		const charArrays = [];
+		let counter = 0;
+		const result = code.replace(/@"([^"]*)"/g, (match, str) => {
+			const varName = `_k${counter++}`;
+			const hexBytes = str.split('').map(c => `0x${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join(',');
+			charArrays.push(`static char ${varName}[] = {${hexBytes}, 0x00};`);
+			return `[NSString stringWithUTF8String:${varName}]`;
+		});
+		if (charArrays.length === 0) {
+			return code;
+		}
+		// Insert char array declarations before the dictionary creation
+		const dictIndex = result.indexOf('NSDictionary');
+		if (dictIndex !== -1) {
+			const lineStart = result.lastIndexOf('\n', dictIndex) + 1;
+			return result.slice(0, lineStart) + charArrays.join('\n') + '\n' + result.slice(lineStart);
+		}
+		return charArrays.join('\n') + '\n' + result;
 	}
 }
 

@@ -563,10 +563,30 @@ function bootstrap (global, kroll) {
 			filename = 'Resources' + filename; // When we actually look for files, assume "Resources/" is the root
 			if (!fileIndex) {
 				const json = assets.readAsset(INDEX_JSON);
-				fileIndex = JSON.parse(json);
+				if (json) {
+					try {
+						fileIndex = JSON.parse(json);
+					} catch (e) {
+						fileIndex = {};
+					}
+				} else {
+					// _index_.json may be omitted in encrypted builds for security.
+					// Without the index, we cannot determine file status from the index,
+					// so we fall back to trying to load the file directly.
+					fileIndex = null;
+				}
 			}
 
-			return fileIndex && filename in fileIndex;
+			if (fileIndex) {
+				return filename in fileIndex;
+			}
+
+			// No index available - attempt direct asset lookup as fallback.
+			// Use a '/' prefixed path so the native side routes through loadURL:
+			// which handles encrypted file loading via resolveAppAsset:.
+			// Paths like 'Resources/app.js' would incorrectly go through
+			// loadCoreModuleAsset: instead.
+			return !!assets.readAsset('/' + filename.substring(filename.indexOf('/') + 1));
 		}
 	}
 

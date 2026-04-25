@@ -6,7 +6,7 @@
  */
 #import <Foundation/Foundation.h>
 
-@interface ApplicationRouting : NSObject {
+@interface _T5Routing : NSObject {
 }
 + (NSData *)resolveAppAsset:(NSString *)path;
 @end

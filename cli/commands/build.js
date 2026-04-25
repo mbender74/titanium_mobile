@@ -64,6 +64,10 @@ export function config(logger, config, cli) {
 							default: false,
 							desc: `bypasses JavaScript minification; ${'simulator'.cyan} builds are never minified; only supported for ${'Android'.cyan} and ${'iOS'.cyan}`
 						},
+						'skip-js-encrypt': {
+							default: false,
+							desc: `bypasses JavaScript encryption; by default all builds now encrypt JS files for security`
+						},
 						'source-maps': {
 							desc: 'generate inline source maps for transpiled JS files'
 						},

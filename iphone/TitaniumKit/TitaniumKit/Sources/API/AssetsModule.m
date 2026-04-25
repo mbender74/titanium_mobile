@@ -74,12 +74,14 @@ typedef NS_ENUM(NSInteger, FileStatus) {
     return [TiUtils loadAppResource:url]; // try to load encrypted file
 
   case FileStatusUnknown:
-    // There was no index.json so fallback to just trying to read from disk/encryption the slow way
-    data = [NSData dataWithContentsOfURL:url];
-    if (data == nil) {
-      return [TiUtils loadAppResource:url];
+    // No _index_.json available (production builds omit it). Try encrypted first,
+    // then fall back to disk. In production builds most JS is encrypted, so this
+    // order avoids a wasted disk lookup for every encrypted file.
+    data = [TiUtils loadAppResource:url];
+    if (data != nil) {
+      return data;
     }
-    return data;
+    return [NSData dataWithContentsOfURL:url];
 
   case FileStatusDoesntExist:
   default:

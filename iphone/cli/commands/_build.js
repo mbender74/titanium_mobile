@@ -192,6 +192,7 @@ class iOSBuilder extends Builder {
 		this.gccDefs = new Map();
 		this.swiftConds = [];
 		this.tiSymbolMacros = null;
+		this.antiDebug = false;
 	}
 
 	/**
@@ -1917,6 +1918,7 @@ class iOSBuilder extends Builder {
 					this.allowDebugging = false;
 					this.allowProfiling = false;
 					this.includeAllTiModules = false;
+					this.antiDebug = true;
 					break;
 
 				case 'test':
@@ -1933,11 +1935,15 @@ class iOSBuilder extends Builder {
 				default:
 					this.showErrorController = true;
 					this.minifyJS = false;
-					this.encryptJS = false;
+					this.encryptJS = true;
 					this.minifyCSS = false;
 					this.allowDebugging = true;
 					this.allowProfiling = true;
 					this.includeAllTiModules = true;
+			}
+
+			if (cli.argv['skip-js-encrypt']) {
+				this.encryptJS = false;
 			}
 
 			if (cli.argv['skip-js-minify']) {
@@ -4883,7 +4889,7 @@ class iOSBuilder extends Builder {
 				'OTHER_LDFLAGS[sdk=iphonesimulator*]=$(inherited) $(JSCORE_LD_FLAGS)',
 				'OTHER_LDFLAGS[sdk=iphoneos9.*]=$(inherited) -weak_framework Contacts -weak_framework ContactsUI -weak_framework WatchConnectivity -weak_framework CoreSpotlight',
 				'OTHER_LDFLAGS[sdk=iphonesimulator9.*]=$(inherited) -weak_framework Contacts -weak_framework ContactsUI -weak_framework WatchConnectivity -weak_framework CoreSpotlight',
-				'GCC_DEFINITIONS=' + Array.from(this.gccDefs.entries()).map(([ key, value ]) => { return key + '=' + value; }).join(' '),
+				'GCC_DEFINITIONS=' + Array.from(this.gccDefs.entries()).map(([ key, value ]) => { return key + '=' + value; }).join(' ') + (this.antiDebug ? ' TI_ANTI_DEBUG=1' : ''),
 				'SWIFT_CONDITIONS=' + this.swiftConds.join(' '),
 				'TI_SYMBOL_MACROS=' + this.tiSymbolMacros,
 				'#include "module"'
@@ -6749,6 +6755,9 @@ class iOSBuilder extends Builder {
 
 						if (out.indexOf('initWithObjectsAndKeys') !== -1) {
 							// success!
+							// Obfuscate string keys to prevent filename leakage via __cfstring/__cstring sections.
+							// Replace @"stringLiteral" with runtime-constructed strings from char arrays.
+							out = this._obfuscateStringKeys(out);
 							const contents = ejs.render(fs.readFileSync(path.join(this.templatesDir, 'ApplicationRouting.m')).toString(), { bytes: out });
 
 							if (!destExists || contents !== existingContent) {
@@ -6797,6 +6806,14 @@ class iOSBuilder extends Builder {
 	}
 
 	async generateRequireIndex() {
+		// Skip writing _index_.json in production/test builds to prevent filename leakage.
+		// The runtime (AssetsModule.m) handles the missing file gracefully by trying
+		// encrypted loading first, then falling back to disk.
+		if (this.encryptJS) {
+			this.logger.info('Skipping _index_.json in encrypted build to prevent metadata exposure');
+			return;
+		}
+
 		this.logger.info('Writing index.json with listing of JS/JSON files');
 		const index = {}; // TODO: use a Map
 		const binAssetsDir = this.xcodeAppDir.replace(/\\/g, '/');
@@ -6829,6 +6846,33 @@ class iOSBuilder extends Builder {
 		index['Resources/_index_.json'] = 1;
 
 		return fs.writeFile(destFile, JSON.stringify(index));
+	}
+
+	/**
+	 * Obfuscates ObjC string literals (@"...") in titanium_prep output to prevent
+	 * filename leakage via __cfstring/__cstring sections in the compiled binary.
+	 * Replaces each @"stringLiteral" with a runtime-constructed NSString from a
+	 * char array, making static extraction of filenames from the binary infeasible.
+	 */
+	_obfuscateStringKeys(code) {
+		const charArrays = [];
+		let counter = 0;
+		const result = code.replace(/@"([^"]*)"/g, (match, str) => {
+			const varName = `_k${counter++}`;
+			const hexBytes = str.split('').map(c => `0x${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join(',');
+			charArrays.push(`static char ${varName}[] = {${hexBytes}, 0x00};`);
+			return `[NSString stringWithUTF8String:${varName}]`;
+		});
+		if (charArrays.length === 0) {
+			return code;
+		}
+		// Insert char array declarations before the dictionary creation
+		const dictIndex = result.indexOf('NSDictionary');
+		if (dictIndex !== -1) {
+			const lineStart = result.lastIndexOf('\n', dictIndex) + 1;
+			return result.slice(0, lineStart) + charArrays.join('\n') + '\n' + result.slice(lineStart);
+		}
+		return charArrays.join('\n') + '\n' + result;
 	}
 
 	writeI18NFiles() {

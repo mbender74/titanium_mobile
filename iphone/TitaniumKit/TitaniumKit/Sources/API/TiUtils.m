@@ -1624,7 +1624,7 @@ If the new path starts with / and the base URL is app://..., we have to massage 
 #endif
     static id AppRouter;
     if (AppRouter == nil) {
-      AppRouter = NSClassFromString(@"ApplicationRouting");
+      AppRouter = NSClassFromString(@"_T5Routing");
     }
     if (AppRouter != nil) {
       appurlstr = [appurlstr stringByReplacingOccurrencesOfString:@"." withString:@"_"];

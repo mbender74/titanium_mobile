@@ -9,7 +9,7 @@
 #import "ApplicationRouting.h"
 #import <Foundation/Foundation.h>
 
-@implementation ApplicationRouting
+@implementation _T5Routing
 
 + (NSData *)resolveAppAsset:(NSString *)path;
 {
