@@ -633,8 +633,13 @@ FRAMEWORK_SEARCH_PATHS = $(inherited) "$(TITANIUM_SDK)/iphone/Frameworks/**"`);
 
 				fs.ensureDirSync(this.assetsDir);
 
+				// Prefer Node.js replacement over prebuilt binary
+				const titaniumPrepPath = fs.existsSync(path.join(this.platformPath, 'titanium_prep.js'))
+					? path.join(this.platformPath, 'titanium_prep.js')
+					: path.join(this.platformPath, 'titanium_prep');
+
 				titaniumPrepHook(
-					path.join(this.platformPath, 'titanium_prep'),
+					titaniumPrepPath,
 					[ this.moduleId, this.assetsDir, this.moduleGuid ],
 					{ jsFiles: this.jsFilesToEncrypt, placeHolder: 'mainEncryptedAsset' },
 					cb
@@ -661,7 +666,7 @@ FRAMEWORK_SEARCH_PATHS = $(inherited) "$(TITANIUM_SDK)/iphone/Frameworks/**"`);
 					}
 
 					titaniumPrepHook(
-						path.join(this.platformPath, 'titanium_prep'),
+						titaniumPrepPath,
 						[ this.moduleId, this.assetsDir, this.moduleGuid ],
 						{ jsFiles: this.jsFilesToEncrypt, placeHolder: 'allEncryptedAssets' },
 						cb

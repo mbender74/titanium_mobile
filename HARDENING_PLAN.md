@@ -390,15 +390,34 @@ The JS kernel contained an em-dash character (`—`) in a comment, which encoded
 **Files changed:**
 - `common/Resources/ti.internal/kernel/module.js` — Replaced em-dash `—` with ASCII dash `-` in the fallback comment
 
-### Not Yet Implemented (Require prebuilt binary changes)
+### Not Yet Implemented (Previously blocked on titanium_prep source)
 
 | Priority | Measure | Impact | Effort | Blocker |
 |----------|---------|--------|--------|---------|
-| 1 | Remove key/IV from binary (1C: White-box AES) | Critical | High | Requires `titanium_prep` rewrite (tiverify now has source) |
-| 2 | Hash-based string lookup (2B/2C) | High | Medium | Requires `titanium_prep` rewrite |
-| 4 | Encrypt NSRange array (4B) | Medium | Medium | Requires `titanium_prep` rewrite (tiverify now has source) |
-| 4 | XOR-mask data blob (4C) | Medium | Low | Requires `titanium_prep` rewrite (tiverify now has source) |
+| 1 | Remove key/IV from binary (1C: White-box AES) | Critical | Medium | No blocker — titanium_prep now has source |
+| 2 | Hash-based string lookup (2B/2C) | High | Medium | No blocker — titanium_prep now has source |
+| 4 | Encrypt NSRange array (4B) | Medium | Medium | No blocker — titanium_prep now has source |
+| 4 | XOR-mask data blob (4C) | Medium | Low | No blocker — titanium_prep now has source |
 | 5C | Strip ObjC metadata sections | Medium | Low | No blocker — Xcode build phase changes only |
+
+#### titanium_prep Node.js Replacement — IMPLEMENTED
+
+The prebuilt `titanium_prep` binary (the last closed-source component in the iOS build pipeline) has been replaced with a Node.js script (`support/iphone/titanium_prep.js`). The script is a drop-in replacement that:
+
+- Accepts the same 3 CLI arguments (`<app_id> <assets_dir> <guid>`) and reads filenames from stdin
+- Encrypts each file with AES-128-CBC + PKCS7 padding using `crypto.createCipheriv`
+- Generates random key and IV via `crypto.randomBytes(16)`
+- Produces the same Objective-C output format: `static UInt8 data[]`, `static NSRange ranges[]`, and `initWithObjectsAndKeys` dictionary
+- The build system prefers `titanium_prep.js` over the binary when both are present
+
+Round-trip decryption testing confirms the output is compatible with `TiVerify.m`'s `filterDataInRange()`.
+
+**Files added:**
+- `support/iphone/titanium_prep.js` — Node.js drop-in replacement for the prebuilt binary
+
+**Files changed:**
+- `iphone/cli/commands/_build.js` — Prefers `titanium_prep.js` over `titanium_prep` binary in `encryptJSFiles()`
+- `iphone/cli/commands/_buildModule.js` — Prefers `titanium_prep.js` over `titanium_prep` binary in `compileJS()`
 
 #### tiverify.xcframework Rebuild — IMPLEMENTED
 
@@ -430,11 +449,11 @@ This recompiles `TiVerify.m` from source and replaces `iphone/lib/tiverify.xcfra
 
 | Priority | Measure | Impact | Effort | Blocker |
 |----------|---------|--------|--------|---------|
-| ~~1~~ | ~~Remove key/IV from binary (1C: White-box AES)~~ | Critical | High | ~~Requires tiverify + titanium_prep rewrite~~ Requires titanium_prep rewrite only (tiverify now has source) |
+| ~~1~~ | ~~Remove key/IV from binary (1C: White-box AES)~~ | Critical | ~~High~~ Medium | ~~Requires tiverify + titanium_prep rewrite~~ No blocker — both now have source |
 | ~~2~~ | ~~Obfuscate string constants (2A: Runtime string construction)~~ | High | ~~Medium~~ Low | ~~Requires `titanium_prep` rewrite~~ No blocker — implemented as post-processing |
 | ~~3~~ | ~~Remove `_index_.json` (Measure 3)~~ | High | ~~Low~~ | ~~No blocker — pure JS/ObjC changes~~ Implemented |
-| 4 | Encrypt NSRange array (4B) | Medium | Medium | Requires `titanium_prep` rewrite (tiverify now has source) |
-| 5 | XOR-mask data blob (4C) | Medium | Low | Requires `titanium_prep` rewrite (tiverify now has source) |
+| 4 | Encrypt NSRange array (4B) | Medium | Medium | No blocker — titanium_prep now has source |
+| 5 | XOR-mask data blob (4C) | Medium | Low | No blocker — titanium_prep now has source |
 | ~~6~~ | ~~Strip/obfuscate metadata (5A: Class names)~~ | Medium | ~~Low~~ | ~~No blocker — build config changes~~ Implemented |
 | ~~7~~ | ~~Anti-debugging check (6A)~~ | Low | ~~Low~~ | ~~No blocker — ObjC code changes~~ Implemented |
 
@@ -444,8 +463,10 @@ This recompiles `TiVerify.m` from source and replaces `iphone/lib/tiverify.xcfra
 
 **After quick wins (Measures 2A, 3, 5A, 6A — now implemented):** Static analysis is significantly harder. Filenames are no longer in `__cfstring` as plain strings (must trace runtime), `_index_.json` is gone, class names are obfuscated, and debugging is blocked. An attacker would need to use entropy analysis and dynamic tracing, raising effort from minutes to hours. All hardening now applies to every build type (production, test, development, simulator, macOS).
 
-**After Measures 1-3 (full implementation):** Static analysis of the IPA alone is no longer sufficient. An attacker needs dynamic analysis (runtime tracing on a jailbroken device) or significant reverse engineering effort (weeks, not minutes).
+**After Measures 1-3 (full implementation):** Static analysis of the IPA alone is no longer sufficient. An attacker needs dynamic analysis (runtime tracing on a jailbroken device) or significant reverse engineering effort (weeks, not minutes). With `titanium_prep` now in source form, implementing white-box AES, hash-based lookups, and data obfuscation is unblocked.
 
 **After Measures 1-5 (full implementation):** Even dynamic analysis becomes challenging. Recovering filenames requires tracing every `resolveAppAsset:` call or brute-forcing hash mappings. Combined with anti-debugging, the effort approaches the cost of rewriting the app from scratch.
+
+**No remaining prebuilt binary blockers:** Both `tiverify.xcframework` and `titanium_prep` are now in source form. All hardening measures can be implemented by modifying the source code.
 
 **Practical recommendation:** The implemented quick wins eliminate the most exploitable vectors with minimal effort. The remaining measures (1, 2B/C, 4) require reimplementing `titanium_prep` and `tiverify.xcframework` with available source code. Until those binaries are replaced, the current implementation provides the best achievable protection without prebuilt binary modifications.

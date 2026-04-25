@@ -6797,8 +6797,13 @@ class iOSBuilder extends Builder {
 			);
 		});
 
+		// Prefer Node.js replacement over prebuilt binary
+		const titaniumPrepPath = fs.existsSync(path.join(this.platformPath, 'titanium_prep.js'))
+			? path.join(this.platformPath, 'titanium_prep.js')
+			: path.join(this.platformPath, 'titanium_prep');
+
 		titaniumPrepHook(
-			path.join(this.platformPath, 'titanium_prep'),
+			titaniumPrepPath,
 			[ this.tiapp.id, this.buildAssetsDir, this.tiapp.guid ],
 			{},
 			next
