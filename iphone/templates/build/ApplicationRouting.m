@@ -39,7 +39,9 @@ static BOOL _isDebuggerAttached(void)
     return nil;
   }
 #endif
-  <% -bytes %>
+  // clang-format off
+	<%- bytes %>
+  // clang-format on
 
   NSNumber *index
       = [map objectForKey:path];
