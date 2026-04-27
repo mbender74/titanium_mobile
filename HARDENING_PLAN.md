@@ -347,6 +347,19 @@ The Android encryption system uses `ti.cloak` — a closed-source module that ha
 
 **Impact:** Eliminates Android Vector 1 (key extraction from `.so`) and Vector 3 (closed-source dependency).
 
+**Why pure Java instead of a native `.so`?** The Titanium SDK is open source — both the build scripts and runtime templates are publicly available. A determined attacker can analyze either approach:
+
+| Aspect | Pure Java (current) | Native `.so` (old ti.cloak) |
+|---|---|---|
+| Filenames in binary | djb2 hashes only (irreversible) | Plaintext strings in `assets` collection |
+| Key extraction | XOR-masked — must find `xmask[]` + `maskedKey[]` and unmask | `KEY_BLOCK` at exported symbol, XOR with plaintext salt |
+| Runtime extraction | Blocked by `Debug.isDebuggerConnected()` | `verifyApplication()` trivially bypassed |
+| Reverse engineering effort | `jadx` decompiles DEX in seconds | `objdump`/Ghidra analyzes `.so` in minutes |
+| Dynamic extraction | Frida hooks Java methods | Frida hooks JNI (`getKey()` return value) |
+| Maintenance | Zero — pure Java, no ABI variants | Must build for 4+ ABIs per release |
+
+The old `ti.cloak` was actually **less secure** than the current pure-Java approach: it stored filenames as plaintext strings, had the key at an exported symbol (`KEY_BLOCK`), and its package-name verification was trivially bypassed. The real security improvement comes from the hardening measures (hash-based lookup, XOR masking, anti-debug), not from whether the decryption code is Java or native. Both approaches are equally vulnerable to a determined attacker with Frida on a rooted device.
+
 **Files to create:**
 - `support/android/cloak.js` — Pure Node.js replacement for ti.cloak's build-time functions
 
