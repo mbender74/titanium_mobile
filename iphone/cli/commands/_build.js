@@ -1924,7 +1924,7 @@ class iOSBuilder extends Builder {
 				case 'test':
 					this.showErrorController = true;
 					this.minifyJS = true;
-					this.encryptJS = true;
+					this.encryptJS = false;
 					this.minifyCSS = true;
 					this.allowDebugging = true;
 					this.allowProfiling = true;
@@ -1935,14 +1935,17 @@ class iOSBuilder extends Builder {
 				default:
 					this.showErrorController = true;
 					this.minifyJS = false;
-					this.encryptJS = true;
+					this.encryptJS = false;
 					this.minifyCSS = false;
 					this.allowDebugging = true;
 					this.allowProfiling = true;
 					this.includeAllTiModules = true;
 			}
 
-			if (cli.argv['skip-js-encrypt']) {
+			if (cli.argv['always-js-encrypt'] || (cli.tiapp.properties['ti.always.encryptjs'] && cli.tiapp.properties['ti.always.encryptjs'].value === 'true')) {
+				this.encryptJS = true;
+			}
+			if (cli.argv['skip-js-encrypt'] || (cli.tiapp.properties['ti.skip.encryptjs'] && cli.tiapp.properties['ti.skip.encryptjs'].value === 'true')) {
 				this.encryptJS = false;
 			}
 

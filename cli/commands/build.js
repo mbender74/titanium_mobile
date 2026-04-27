@@ -66,7 +66,11 @@ export function config(logger, config, cli) {
 						},
 						'skip-js-encrypt': {
 							default: false,
-							desc: `bypasses JavaScript encryption; by default all builds now encrypt JS files for security`
+							desc: `bypasses JavaScript encryption; only affects production builds where encryption is on by default`
+						},
+						'always-js-encrypt': {
+							default: false,
+							desc: `forces JavaScript encryption for non-production builds (development/test); production builds always encrypt`
 						},
 						'source-maps': {
 							desc: 'generate inline source maps for transpiled JS files'

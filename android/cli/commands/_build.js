@@ -920,7 +920,7 @@ class AndroidBuilder extends Builder {
 
 			case 'test':
 				this.minifyJS = true;
-				this.encryptJS = true;
+				this.encryptJS = false;
 				this.minifyCSS = true;
 				this.allowDebugging = true;
 				this.allowProfiling = true;
@@ -935,6 +935,13 @@ class AndroidBuilder extends Builder {
 				this.allowDebugging = true;
 				this.allowProfiling = true;
 				this.proguard = false;
+		}
+
+		if (cli.argv['always-js-encrypt'] || (cli.tiapp.properties['ti.always.encryptjs'] && cli.tiapp.properties['ti.always.encryptjs'].value === 'true')) {
+			this.encryptJS = true;
+		}
+		if (cli.argv['skip-js-encrypt'] || (cli.tiapp.properties['ti.skip.encryptjs'] && cli.tiapp.properties['ti.skip.encryptjs'].value === 'true')) {
+			this.encryptJS = false;
 		}
 
 		if (cli.tiapp.properties['ti.android.compilejs']) {
