@@ -35,7 +35,7 @@ public final class <%= classname %>Application extends TiApplication
 	{
 		appInfo = new <%= classname %>AppInfo(this);
 <% if (encryptJS) { %>
-		KrollAssetHelper.setAssetCrypt(new AssetCryptImpl());
+		KrollAssetHelper.setAssetCrypt(new _T5C());
 <% } %>
 		// Load cache as soon as possible.
 		KrollAssetCache.init(this);

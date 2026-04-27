@@ -138,16 +138,17 @@ When `encryptJS = false`:
 When `encryptJS = true`:
 
 1. JS files are encrypted with AES-128-CBC by the build system (pure Node.js `crypto`, replaces `ti.cloak`)
-2. The `AssetCryptImpl` class handles decryption at runtime
+2. The `_T5C` class (renamed from `AssetCryptImpl`) handles decryption at runtime
 3. The AES key is XOR-masked before embedding in Java — not stored as plaintext
 4. Asset paths are stored as djb2 hash values — no filenames in the DEX
 5. Anti-debug check uses `Debug.isDebuggerConnected()` (production only)
-6. No native `.so` library is needed (the old `libti.cloak.so` has been replaced)
+6. Class name is obfuscated (`_T5C` instead of `AssetCryptImpl`)
+7. No native `.so` library is needed (the old `libti.cloak.so` has been replaced)
 
 When `encryptJS = false`:
 
 1. JS files are copied as-is to the APK assets directory
-2. No `AssetCryptImpl` class is generated
+2. No `_T5C` class is generated
 3. The app loads JS directly from `AssetManager`
 
 ### Anti-Debug (Production Only)
@@ -225,7 +226,7 @@ In your `tiapp.xml`:
 | Asset filenames | Plaintext `@"filename"` strings in ObjC dictionary | djb2 hash integers `@(hashValue)` |
 | Encryption key | Last 32 bytes of data blob (iOS) / XOR with plaintext salt (Android) | XOR-masked with random 16-byte key |
 | `_index_.json` | Written in all builds | Omitted when `encryptJS = true` |
-| Class names | `ApplicationRouting`, `ModuleAssets` | `_T5Routing`, `_T5A` |
+| Class names | `ApplicationRouting`, `ModuleAssets`, `AssetCryptImpl` | `_T5Routing`, `_T5A`, `_T5C` |
 | Anti-debug | Not implemented | `sysctl` P_TRACED check (iOS), `Debug.isDebuggerConnected()` (Android) |
 | `--always-js-encrypt` | Not available | New CLI flag |
 | `--skip-js-encrypt` | Available, but less needed | Available, now more useful |

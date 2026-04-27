@@ -15,9 +15,9 @@ import org.appcelerator.kroll.common.Log;
 import org.appcelerator.kroll.util.KrollAssetHelper;
 
 @SuppressWarnings("unchecked")
-public class AssetCryptImpl implements KrollAssetHelper.AssetCrypt
+public class _T5C implements KrollAssetHelper.AssetCrypt
 {
-	private static final String TAG = "AssetCryptImpl";
+	private static final String TAG = "_T5C";
 
 	private static final String BIN_EXT = ".bin";
 
@@ -64,13 +64,19 @@ public class AssetCryptImpl implements KrollAssetHelper.AssetCrypt
 		return hash & 0xFFFFFFFFL;
 	}
 
-	private static boolean assetExists(String path)
+	private static boolean hashExists(String path)
 	{
 		long h = djb2(path);
 		for (long ah : ASSET_HASHES) {
 			if (ah == h) return true;
 		}
 		return false;
+	}
+
+	@Override
+	public boolean assetExists(String path)
+	{
+		return hashExists(path);
 	}
 
 	@Override
@@ -103,7 +109,7 @@ public class AssetCryptImpl implements KrollAssetHelper.AssetCrypt
 			return null;
 		}
 <% } %>
-		if (!assetExists(path)) {
+		if (!hashExists(path)) {
 			return null;
 		}
 		if (!path.endsWith(BIN_EXT)) {

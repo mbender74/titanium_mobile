@@ -20,7 +20,7 @@ public final class TitaniumTestApplication extends TiApplication
 	{
 		appInfo = new TitaniumTestAppInfo(this);
 
-		// KrollAssetHelper.setAssetCrypt(new AssetCryptImpl());
+		// KrollAssetHelper.setAssetCrypt(new _T5C());
 
 		// Load cache as soon as possible.
 		KrollAssetCache.init(this);

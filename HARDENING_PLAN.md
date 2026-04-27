@@ -365,7 +365,7 @@ The old `ti.cloak` was actually **less secure** than the current pure-Java appro
 
 **Files to modify:**
 - `android/cli/commands/_build.js` — Replace `import('ti.cloak')` with `cloak.js`
-- `android/templates/build/AssetCryptImpl.java` — Remove `System.loadLibrary("ti.cloak")` and `ti.cloak.Binding.getKey()`, embed XOR-masked key directly
+- `android/templates/build/_T5C.java` — Remove `System.loadLibrary("ti.cloak")` and `ti.cloak.Binding.getKey()`, embed XOR-masked key directly
 - `build/lib/packager.js` — Remove `ti.cloak.zip` extraction
 
 **Files to delete:**
@@ -379,11 +379,11 @@ The old `ti.cloak` was actually **less secure** than the current pure-Java appro
 
 **Equivalent iOS measure:** Measure 2B (hash-based string lookup)
 
-**Implementation:** Add `djb2()` and `assetExists()` methods to `AssetCryptImpl.java`. Build script computes hashes from asset paths and outputs them as `long[]` literals.
+**Implementation:** Add `djb2()` and `assetExists()` methods to `_T5C.java`. Build script computes hashes from asset paths and outputs them as `long[]` literals.
 
 ### Measure A3: XOR-Masked Key
 
-**Description:** The AES key embedded in `AssetCryptImpl.java` is XOR-masked with a random 16-byte mask. At runtime, `getKey()` unmasks the key before using it. This mirrors the iOS `xmask[]` approach.
+**Description:** The AES key embedded in `_T5C.java` is XOR-masked with a random 16-byte mask. At runtime, `getKey()` unmasks the key before using it. This mirrors the iOS `xmask[]` approach.
 
 **Impact:** Defeats static key extraction from decompiled Java. An attacker must trace the XOR-unmasking at runtime.
 
@@ -399,7 +399,7 @@ The old `ti.cloak` was actually **less secure** than the current pure-Java appro
 
 ### Measure A5: Class Name Obfuscation
 
-**Description:** Rename `AssetCryptImpl` to `_T5C` or similar opaque name. Update `App.java` template and `KrollAssetHelper` references accordingly.
+**Description:** Rename `AssetCryptImpl` to `_T5C`. Update `App.java` template reference from `new AssetCryptImpl()` to `new _T5C()`. The template file is renamed from `AssetCryptImpl.java` to `_T5C.java`.
 
 **Impact:** Removes the purpose-revealing class name from the DEX.
 

@@ -2913,14 +2913,14 @@ class AndroidBuilder extends Builder {
 			await fs.writeFile(to, encrypted);
 		}
 
-		// Generate 'AssetCryptImpl.java' from template
-		const assetCryptDest = path.join(this.buildGenAppIdDir, 'AssetCryptImpl.java');
+		// Generate '_T5C.java' from template (obfuscated class name)
+		const assetCryptDest = path.join(this.buildGenAppIdDir, '_T5C.java');
 		this.unmarkBuildDirFile(assetCryptDest);
 		await fs.ensureDir(this.buildGenAppIdDir);
 		await fs.writeFile(
 			assetCryptDest,
 			ejs.render(
-				await fs.readFile(path.join(this.templatesDir, 'AssetCryptImpl.java'), 'utf8'),
+				await fs.readFile(path.join(this.templatesDir, '_T5C.java'), 'utf8'),
 				{
 					appid: this.appid,
 					xmask: formatBytes(xmask),
