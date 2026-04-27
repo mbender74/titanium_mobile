@@ -431,6 +431,33 @@ Three critical components in the encryption pipeline were prebuilt binaries with
 
 ## Implementation Status
 
+### Quick Overview
+
+| # | Measure | Platform | Status |
+|---|---------|----------|--------|
+| 2A | Runtime string construction | iOS | ✅ Implemented |
+| 2B | Hash-based string lookup (djb2) | iOS | ✅ Implemented |
+| 3 | Remove `_index_.json` | iOS | ✅ Implemented |
+| 4C | XOR-mask data blob | iOS | ✅ Implemented |
+| 5A | Obfuscate class names | iOS | ✅ Implemented (`_T5Routing`, `_T5A`) |
+| 5A | Obfuscate class names | Android | ✅ Implemented (`_T5C`) |
+| 6A | Anti-debugging check | iOS | ✅ Implemented (`sysctl` P_TRACED) |
+| 6A | Anti-debugging check | Android | ✅ Implemented (`Debug.isDebuggerConnected()`) |
+| — | Production-only `encryptJS` default | Both | ✅ Implemented |
+| — | `--always-js-encrypt` / `--skip-js-encrypt` CLI flags | Both | ✅ Implemented |
+| — | `ti.always.encryptjs` / `ti.skip.encryptjs` tiapp.xml | Both | ✅ Implemented |
+| A1 | Replace ti.cloak with pure Java/Node.js | Android | ✅ Implemented |
+| A2 | Hash-based asset lookup (djb2) | Android | ✅ Implemented |
+| A3 | XOR-masked key | Android | ✅ Implemented |
+| A4 | Anti-debug check | Android | ✅ Implemented |
+| A5 | Class name obfuscation | Android | ✅ Implemented |
+| — | `titanium_prep` Node.js replacement | iOS | ✅ Implemented |
+| — | `tiverify.xcframework` rebuild from source | iOS | ✅ Implemented |
+| — | JS kernel fallback for missing `_index_.json` | iOS | ✅ Implemented |
+| 1C | White-box AES (remove key/IV from binary) | iOS | ❌ Not implemented |
+| 4B | Encrypt NSRange array | iOS | ❌ Not implemented |
+| 5C | Strip ObjC metadata | iOS | 📝 Documented (manual step) |
+
 ### Quick Wins (No prebuilt binary dependency) — IMPLEMENTED
 
 The following measures have been implemented on branch `security/js-encryption-hardening`:
@@ -510,7 +537,6 @@ The JS kernel contained an em-dash character (`—`) in a comment, which encoded
 |----------|---------|--------|--------|---------|
 | 1 | Remove key/IV from binary (1C: White-box AES) | Critical | Medium | No blocker — titanium_prep now has source |
 | 4 | Encrypt NSRange array (4B) | Medium | Medium | No blocker — titanium_prep now has source |
-| — | Android hardening (replace ti.cloak) | High | High | No blocker — ti.cloak can be replaced with pure Java/Node.js |
 
 #### Measure 2B: Hash-Based String Lookup — IMPLEMENTED
 
@@ -597,26 +623,27 @@ This recompiles `TiVerify.m` from source and replaces `iphone/lib/tiverify.xcfra
 
 ## Recommended Priority
 
-| Priority | Measure | Impact | Effort | Blocker |
-|----------|---------|--------|--------|---------|
-| ~~1~~ | ~~Remove key/IV from binary (1C: White-box AES)~~ | Critical | ~~High~~ Medium | ~~Requires tiverify + titanium_prep rewrite~~ No blocker — both now have source |
-| ~~2~~ | ~~Obfuscate string constants (2A: Runtime string construction)~~ | High | ~~Medium~~ Low | ~~Requires `titanium_prep` rewrite~~ No blocker — implemented as post-processing |
-| ~~3~~ | ~~Remove `_index_.json` (Measure 3)~~ | High | ~~Low~~ | ~~No blocker — pure JS/ObjC changes~~ Implemented |
-| 4 | Encrypt NSRange array (4B) | Medium | Medium | No blocker — titanium_prep now has source |
-| ~~5~~ | ~~XOR-mask data blob (4C)~~ | Medium | ~~Low~~ | ~~No blocker~~ Implemented |
-| ~~6~~ | ~~Strip/obfuscate metadata (5A + 5C)~~ | Medium | ~~Low~~ | ~~No blocker~~ Implemented (5A) / Documented (5C) |
-| ~~7~~ | ~~Anti-debugging check (6A)~~ | Low | ~~Low~~ | ~~No blocker — ObjC code changes~~ Implemented |
+| Priority | Measure | Impact | Effort | Status |
+|----------|---------|--------|--------|--------|
+| ~~1~~ | ~~Obfuscate string constants (2A: Runtime string construction)~~ | High | ~~Medium~~ Low | ✅ Implemented |
+| ~~2~~ | ~~Remove `_index_.json` (Measure 3)~~ | High | Low | ✅ Implemented |
+| ~~3~~ | ~~Hash-based string lookup (2B)~~ | High | Low | ✅ Implemented |
+| ~~4~~ | ~~XOR-mask data blob (4C)~~ | Medium | Low | ✅ Implemented |
+| ~~5~~ | ~~Strip/obfuscate metadata (5A + 5C)~~ | Medium | Low | ✅ 5A implemented / 📝 5C documented |
+| ~~6~~ | ~~Anti-debugging check (6A)~~ | Low | Low | ✅ Implemented |
+| ~~7~~ | ~~Replace ti.cloak (A1)~~ | High | High | ✅ Implemented |
+| ~~8~~ | ~~Hash-based asset lookup (A2)~~ | High | Low | ✅ Implemented |
+| ~~9~~ | ~~XOR-masked key (A3)~~ | Medium | Low | ✅ Implemented |
+| ~~10~~ | ~~Anti-debug check Android (A4)~~ | Low | Low | ✅ Implemented |
+| ~~11~~ | ~~Class name obfuscation Android (A5)~~ | Medium | Low | ✅ Implemented |
+| ~~12~~ | ~~Production-only encryptJS defaults~~ | High | Low | ✅ Implemented |
+| 13 | Remove key/IV from binary (1C: White-box AES) | Critical | Medium | ❌ Not implemented |
+| 14 | Encrypt NSRange array (4B) | Medium | Medium | ❌ Not implemented |
 
 ## Effectiveness Assessment
 
-**Current state:** An attacker with only the IPA file (no device access) can recover 100% of JS source files in under 30 seconds using `titanium_ipa_decryptor.py`.
+**Current state:** An attacker with only the IPA/APK file (no device access) can recover 100% of JS source files in under 30 seconds using `titanium_ipa_decryptor.py`.
 
-**After quick wins (Measures 2A, 3, 5A, 6A — now implemented):** Static analysis is significantly harder. Filenames are no longer in `__cfstring` as plain strings (must trace runtime), `_index_.json` is gone, class names are obfuscated, and debugging is blocked. An attacker would need to use entropy analysis and dynamic tracing, raising effort from minutes to hours. All hardening now applies to every build type (production, test, development, simulator, macOS).
+**After implemented measures:** Static analysis is significantly harder on both platforms. Filenames are no longer in plaintext (must trace runtime or brute-force hashes), `_index_.json` is gone, class names are obfuscated, and debugging is blocked. An attacker would need to use entropy analysis and dynamic tracing, raising effort from minutes to hours. On Android, `ti.cloak` is eliminated entirely — keys are XOR-masked, filenames are djb2 hashes, and anti-debug protection is active in production.
 
-**After Measures 1-3 (full implementation):** Static analysis of the IPA alone is no longer sufficient. An attacker needs dynamic analysis (runtime tracing on a jailbroken device) or significant reverse engineering effort (weeks, not minutes). With `titanium_prep` now in source form, implementing white-box AES, hash-based lookups, and data obfuscation is unblocked.
-
-**After Measures 1-5 (full implementation):** Even dynamic analysis becomes challenging. Recovering filenames requires tracing every `resolveAppAsset:` call or brute-forcing hash mappings. Combined with anti-debugging, the effort approaches the cost of rewriting the app from scratch.
-
-**No remaining prebuilt binary blockers:** Both `tiverify.xcframework` and `titanium_prep` are now in source form. `ti.cloak` is being replaced entirely with a pure Node.js/Java implementation. All hardening measures can be implemented by modifying source code.
-
-**Practical recommendation:** The implemented quick wins eliminate the most exploitable vectors with minimal effort. The remaining iOS measures (1, 4B) require modifying `titanium_prep.js` and `tiverify`. Android hardening (A1-A5) requires replacing `ti.cloak` and rewriting `AssetCryptImpl.java`.
+**Remaining gaps (iOS only):** Measures 1C (white-box AES) and 4B (encrypted NSRange array) would further harden the iOS encryption, requiring dynamic analysis on a jailbroken device.
