@@ -2870,61 +2870,67 @@ class AndroidBuilder extends Builder {
 			return;
 		}
 
-		// ti.cloak's default export is jacked... there's nested default exports
-		let { default: Cloak } = await import('ti.cloak');
-		while (Cloak && typeof Cloak === 'object') {
-			Cloak = Cloak.default;
-		}
-		if (typeof Cloak !== 'function') {
-			throw new Error('Could not load encryption library!');
-		}
-		const cloak = this.encryptJS ? new Cloak() : null;
-		if (!cloak) {
-			throw new Error('Could not load encryption library!');
-		}
-
 		this.logger.info('Encrypting JavaScript assets...');
 
-		// NOTE: maintain 'build.android.titaniumprep' hook for remote encryption policy.
-		const hook = this.cli.createHook('build.android.titaniumprep', this, async function (exe, args, opts, next) {
-			try {
-				await Promise.all(
-					this.jsFilesToEncrypt.map(async file => {
-						const from = path.join(this.buildAssetsDir, file);
-						const to = path.join(this.buildAppMainAssetsResourcesDir, file + '.bin');
+		const crypto = await import('node:crypto');
 
-						this.logger.debug(`Encrypting: ${from.cyan}`);
-						await fs.ensureDir(path.dirname(to));
-						this.unmarkBuildDirFile(to);
-						return await cloak.encryptFile(from, to);
-					})
-				);
+		// Generate random key, salt (IV), and XOR mask
+		const key = crypto.randomBytes(16);
+		const salt = crypto.randomBytes(16);
+		const xmask = crypto.randomBytes(16);
 
-				this.logger.info('Writing encryption key...');
-				await cloak.setKey('android', this.abis, path.join(this.buildAppMainDir, 'jniLibs'));
+		// XOR-mask the key for embedding in Java
+		const maskedKey = Buffer.alloc(16);
+		for (let i = 0; i < 16; i++) {
+			maskedKey[i] = key[i] ^ xmask[i % xmask.length];
+		}
 
-				// Generate 'AssetCryptImpl.java' from template.
-				const assetCryptDest = path.join(this.buildGenAppIdDir, 'AssetCryptImpl.java');
-				this.unmarkBuildDirFile(assetCryptDest);
-				await fs.ensureDir(this.buildGenAppIdDir);
-				await fs.writeFile(
-					assetCryptDest,
-					ejs.render(
-						await fs.readFile(path.join(this.templatesDir, 'AssetCryptImpl.java'), 'utf8'),
-						{
-							appid: this.appid,
-							assets: this.jsFilesToEncrypt.map(f => f.replace(/\\/g, '/')),
-							salt: cloak.salt
-						}
-					)
-				);
-
-				next();
-			} catch (e) {
-				next(new Error('Could not encrypt assets!\n' + e));
+		// djb2 hash for asset path lookup
+		const djb2 = (str) => {
+			let hash = 5381;
+			for (let i = 0; i < str.length; i++) {
+				hash = ((hash << 5) + hash) + str.charCodeAt(i);
 			}
-		});
-		return util.promisify(hook)(null, [ this.tiapp.guid, '' ], {});
+			return hash >>> 0;
+		};
+
+		const formatBytes = (buf) => {
+			return Array.from(buf).map(b => `(byte)0x${b.toString(16).padStart(2, '0')}`).join(', ');
+		};
+
+		// Encrypt each file
+		for (const file of this.jsFilesToEncrypt) {
+			const from = path.join(this.buildAssetsDir, file);
+			const to = path.join(this.buildAppMainAssetsResourcesDir, file + '.bin');
+
+			this.logger.debug(`Encrypting: ${from.cyan}`);
+			await fs.ensureDir(path.dirname(to));
+			this.unmarkBuildDirFile(to);
+
+			const plaintext = await fs.readFile(from);
+			const cipher = crypto.createCipheriv('aes-128-cbc', key, salt);
+			const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+			await fs.writeFile(to, encrypted);
+		}
+
+		// Generate 'AssetCryptImpl.java' from template
+		const assetCryptDest = path.join(this.buildGenAppIdDir, 'AssetCryptImpl.java');
+		this.unmarkBuildDirFile(assetCryptDest);
+		await fs.ensureDir(this.buildGenAppIdDir);
+		await fs.writeFile(
+			assetCryptDest,
+			ejs.render(
+				await fs.readFile(path.join(this.templatesDir, 'AssetCryptImpl.java'), 'utf8'),
+				{
+					appid: this.appid,
+					xmask: formatBytes(xmask),
+					maskedKey: formatBytes(maskedKey),
+					salt: formatBytes(salt),
+					assetHashes: this.jsFilesToEncrypt.map(f => djb2('Resources/' + f.replace(/\\/g, '/')) + 'L').join(', '),
+					antiDebug: this.deployType === 'production'
+				}
+			)
+		);
 	}
 
 	async generateRequireIndex() {

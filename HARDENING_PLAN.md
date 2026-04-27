@@ -1,6 +1,6 @@
-# Plan: Hardening Titanium iOS IPA Against JS File Recovery
+# Plan: Hardening Titanium SDK Against JS File Recovery
 
-> **Note:** This document is a security analysis and hardening plan. It describes theoretical attack vectors and defensive measures. No changes to the SDK are being implemented — this serves as a reference for understanding and improving the protection of JS files in production IPAs.
+> **Note:** This document is a security analysis and hardening plan covering both iOS and Android platforms. It describes attack vectors, defensive measures, and implementation status.
 
 ## Current Attack Vectors
 
@@ -268,40 +268,141 @@ The existing decryptor (`titanium_ipa_decryptor.py`) successfully recovers JS fi
 
 ---
 
-## Encryption Enforcement for All Build Types
+## Encryption Configuration
 
-Originally, `encryptJS` was only set to `true` for `production` and `test` deploy types. Development, simulator, and macOS debug builds had `encryptJS = false`, meaning JS files were stored unencrypted and all hardening measures were bypassed.
+### Default Behavior
 
-**Change:** `encryptJS` is now `true` for all deploy types including `development` (simulator, macOS). This ensures all hardening measures apply universally regardless of build target.
+`encryptJS` defaults to `true` only for **production** deploy types. Development and test builds have `encryptJS = false` by default, making debugging and development iteration faster.
 
-| Target | Deploy Type | `encryptJS` Before | `encryptJS` After |
-|--------|-------------|--------------------|-------------------|
-| `simulator` | development | false | **true** |
-| `device` | test | true | true |
-| `dist-appstore` | production | true | true |
-| `dist-adhoc` | production | true | true |
-| `macos` | development | false | **true** |
-| `dist-macappstore` | production | true | true |
+| Target | Deploy Type | `encryptJS` Default |
+|--------|-------------|--------------------|
+| `simulator` | development | false |
+| `device` | test | false |
+| `dist-appstore` | production | true |
+| `dist-adhoc` | production | true |
+| `macos` | development | false |
+| `dist-macappstore` | production | true |
 
-A new CLI flag `--skip-js-encrypt` is available to explicitly disable encryption when needed (e.g., for local development iteration where faster builds are preferred over security).
+### CLI Flags
 
-**SDK files requiring changes:**
+- `--skip-js-encrypt`: Bypasses encryption even in production builds. Useful for debugging production-specific issues.
+- `--always-js-encrypt`: Forces encryption on for non-production builds (development/test). Useful for testing hardening during development.
 
-| File | Change |
-|------|--------|
-| `iphone/cli/commands/_build.js` | Changed `this.encryptJS = false` to `this.encryptJS = true` in the `development` case. Added `--skip-js-encrypt` flag handling that sets `this.encryptJS = false` when present. |
-| `cli/commands/build.js` | Added `--skip-js-encrypt` CLI option with `default: false` and description. |
+### tiapp.xml Properties
+
+Encryption can also be controlled via `<property>` elements in `tiapp.xml`:
+
+```xml
+<!-- Force encryption on for development/test builds -->
+<property name="ti.always.encryptjs" type="bool">true</property>
+
+<!-- Disable encryption (even in production) -->
+<property name="ti.skip.encryptjs" type="bool">true</property>
+```
+
+CLI flags take precedence over tiapp.xml properties.
+
+---
+
+## Android Attack Vectors
+
+The Android encryption system uses `ti.cloak` — a closed-source module that handles both build-time encryption and runtime decryption. Analysis reveals critical weaknesses:
+
+### Android Vector 1: Key Extraction from Native Library
+
+**Problem:** The AES key is embedded in `libti.cloak.so` at a known symbol (`KEY_BLOCK`). The native `getKey()` function XORs the `KEY_BLOCK` with the salt parameter to produce the AES key. Both the salt (in `AssetCryptImpl.java` as plaintext) and the `KEY_BLOCK` (in the `.so` at symbol `KEY_BLOCK`) are trivially extractable from the APK.
+
+**Location:** `libti.cloak.so` per ABI, `AssetCryptImpl.java` salt field.
+
+**Current recovery method:** `nm -D libti.cloak.so | grep KEY_BLOCK` to find the offset, extract bytes, XOR with salt from decompiled Java.
+
+### Android Vector 2: Plaintext Asset Filenames
+
+**Problem:** `AssetCryptImpl.java` stores all encrypted asset paths as a `Collection<String>` — e.g., `"Resources/app.js"`, `"Resources/ti.internal/kernel/module.js"`. These are compiled into the DEX as plaintext strings, revealing every encrypted file's name and path.
+
+**Location:** `android/templates/build/AssetCryptImpl.java` — `Arrays.asList("Resources/...", ...)`
+
+**Current recovery method:** Decompile the DEX, extract the `assets` collection, append `.bin` to each path, and decrypt using the extracted key+salt.
+
+### Android Vector 3: Closed-Source Native Library
+
+**Problem:** `libti.cloak.so` and `ti.cloak.jar` are closed-source prebuilt components with no available source code. The `.so` contains `verifyApplication()` which checks the app's package name but is trivially bypassed. The `.jar` contains only a JNI bridge class.
+
+**Location:** `android/titanium/lib/ti.cloak.jar`, `support/ti.cloak.zip/lib/android/*/libti.cloak.so`
+
+### Android Vector 4: No Anti-Debug Protection
+
+**Problem:** No runtime checks prevent debugging or dynamic analysis of the decryption process.
+
+---
+
+## Android Hardening Measures
+
+### Measure A1: Replace ti.cloak with Pure Java/Node.js Implementation
+
+**Description:** Eliminate the closed-source `ti.cloak` dependency entirely. Replace it with:
+- Build-time: Pure Node.js encryption using `crypto` module (same as iOS `titanium_prep.js`)
+- Runtime: Pure Java decryption using `javax.crypto.Cipher` (already in `AssetCryptImpl.java`)
+- No native `.so` libraries needed for encryption
+
+**Impact:** Eliminates Android Vector 1 (key extraction from `.so`) and Vector 3 (closed-source dependency).
+
+**Files to create:**
+- `support/android/cloak.js` — Pure Node.js replacement for ti.cloak's build-time functions
+
+**Files to modify:**
+- `android/cli/commands/_build.js` — Replace `import('ti.cloak')` with `cloak.js`
+- `android/templates/build/AssetCryptImpl.java` — Remove `System.loadLibrary("ti.cloak")` and `ti.cloak.Binding.getKey()`, embed XOR-masked key directly
+- `build/lib/packager.js` — Remove `ti.cloak.zip` extraction
+
+**Files to delete:**
+- `android/titanium/lib/ti.cloak.jar`
+
+### Measure A2: Hash-Based Asset Lookup
+
+**Description:** Replace the `Collection<String> assets` plaintext filename list with a `long[] ASSET_HASHES` array of djb2 hash values. At runtime, compute `djb2(path)` and search the hash array. Filenames never appear in the binary.
+
+**Impact:** Eliminates Android Vector 2 (plaintext asset filenames in DEX).
+
+**Equivalent iOS measure:** Measure 2B (hash-based string lookup)
+
+**Implementation:** Add `djb2()` and `assetExists()` methods to `AssetCryptImpl.java`. Build script computes hashes from asset paths and outputs them as `long[]` literals.
+
+### Measure A3: XOR-Masked Key
+
+**Description:** The AES key embedded in `AssetCryptImpl.java` is XOR-masked with a random 16-byte mask. At runtime, `getKey()` unmasks the key before using it. This mirrors the iOS `xmask[]` approach.
+
+**Impact:** Defeats static key extraction from decompiled Java. An attacker must trace the XOR-unmasking at runtime.
+
+**Equivalent iOS measure:** Measure 4C (XOR-mask data blob)
+
+### Measure A4: Anti-Debug Check
+
+**Description:** Add `Debug.isDebuggerConnected()` check in `getAssetStream()`, returning `null` if a debugger is attached. Only active in production builds (guarded by `BuildConfig.DEBUG`).
+
+**Impact:** Prevents dynamic extraction on a debugged device in production builds.
+
+**Equivalent iOS measure:** Measure 6A (anti-debugging check)
+
+### Measure A5: Class Name Obfuscation
+
+**Description:** Rename `AssetCryptImpl` to `_T5C` or similar opaque name. Update `App.java` template and `KrollAssetHelper` references accordingly.
+
+**Impact:** Removes the purpose-revealing class name from the DEX.
+
+**Equivalent iOS measure:** Measure 5A (class name obfuscation)
 
 ---
 
 ## Prebuilt Binary Dependencies
 
-Two critical components in the encryption pipeline were prebuilt binaries with no available source code. `tiverify.xcframework` has been reverse-engineered and reimplemented; `titanium_prep` remains a prebuilt binary:
+Three critical components in the encryption pipeline were prebuilt binaries with no available source code. `tiverify.xcframework` and `titanium_prep` have been reverse-engineered and reimplemented. `ti.cloak` is being replaced entirely:
 
 | Binary | Location | Purpose | Source available? |
 |--------|----------|---------|-------------------|
-| `titanium_prep` | `support/iphone/titanium_prep` | Build-time tool that generates `data[]`, `ranges[]`, key+IV, and `initWithObjectsAndKeys:` dictionary. Reads `/dev/urandom` for key generation. | No |
-| `tiverify.xcframework` | `iphone/lib/tiverify.xcframework/` | Runtime library providing `filterDataInRange(NSData* thedata, NSRange range)` — performs AES-128-CBC decryption extracting key+IV from end of data | **Yes** — reimplemented from scratch in `iphone/lib/tiverify_src/` |
+| `titanium_prep` | `support/iphone/titanium_prep` | Build-time tool that generates `data[]`, `ranges[]`, key+IV, and `initWithObjectsAndKeys:` dictionary | **Yes** — reimplemented as `support/iphone/titanium_prep.js` |
+| `tiverify.xcframework` | `iphone/lib/tiverify.xcframework/` | Runtime library providing `filterDataInRange(NSData* thedata, NSRange range)` — performs AES-128-CBC decryption | **Yes** — reimplemented in `iphone/lib/tiverify_src/` |
+| `ti.cloak` | `support/ti.cloak.zip`, `android/titanium/lib/ti.cloak.jar` | Build-time encryption + runtime decryption for Android. Contains native `.so` libraries and a JNI bridge class. Key is XOR-obfuscated with plaintext salt. | **Being replaced** — `support/android/cloak.js` provides pure Node.js replacement for build-time; runtime decryption stays in Java |
 
 **Implications:**
 - **Measure 1** (key removal): `tiverify.xcframework` can now be modified to accept key+IV as separate parameters or implement key derivation internally. `titanium_prep` still needs to be reverse-engineered or reimplemented.
@@ -390,15 +491,24 @@ The JS kernel contained an em-dash character (`—`) in a comment, which encoded
 **Files changed:**
 - `common/Resources/ti.internal/kernel/module.js` — Replaced em-dash `—` with ASCII dash `-` in the fallback comment
 
-### Not Yet Implemented (Previously blocked on titanium_prep source)
+### Not Yet Implemented
 
 | Priority | Measure | Impact | Effort | Blocker |
 |----------|---------|--------|--------|---------|
 | 1 | Remove key/IV from binary (1C: White-box AES) | Critical | Medium | No blocker — titanium_prep now has source |
-| 2 | Hash-based string lookup (2B/2C) | High | Medium | No blocker — titanium_prep now has source |
 | 4 | Encrypt NSRange array (4B) | Medium | Medium | No blocker — titanium_prep now has source |
-| ~~4~~ | ~~XOR-mask data blob (4C)~~ | Medium | ~~Low~~ | ~~No blocker~~ Implemented |
-| ~~5C~~ | ~~Strip ObjC metadata sections~~ | Medium | ~~Low~~ | ~~No blocker~~ Documented as manual step |
+| — | Android hardening (replace ti.cloak) | High | High | No blocker — ti.cloak can be replaced with pure Java/Node.js |
+
+#### Measure 2B: Hash-Based String Lookup — IMPLEMENTED
+
+Replaces `initWithObjectsAndKeys:` string-keyed dictionary with `NSDictionary` using integer djb2 hash keys. Filenames are hashed at build time in `titanium_prep.js` and the hash values are used as dictionary keys. At runtime, the incoming path is hashed via `djb2_hash()` before dictionary lookup, so no filenames appear in the compiled binary.
+
+**Files changed:**
+- `support/iphone/titanium_prep.js` — Added `djb2()` hash function; dictionary keys changed from `@"filename"` to `@(hashValue)`
+- `iphone/templates/build/ApplicationRouting.m` — Added `djb2_hash()` C function; lookup uses `@(djb2_hash([path UTF8String]))`
+- `iphone/templates/module/objc/template/ios/Classes/{{ModuleIdAsIdentifier}}ModuleAssets.m.ejs` — Same `djb2_hash()` function and hash-based lookup
+- `iphone/templates/module/swift/template/ios/Classes/{{ModuleIdAsIdentifier}}ModuleAssets.m.ejs` — Same
+- `iphone/cli/commands/_buildModule.js` — Updated `allEncryptedAssetsReturn` to use hash-based lookup
 
 #### Measure 4C: XOR-Mask Data Blob — IMPLEMENTED
 
@@ -494,6 +604,6 @@ This recompiles `TiVerify.m` from source and replaces `iphone/lib/tiverify.xcfra
 
 **After Measures 1-5 (full implementation):** Even dynamic analysis becomes challenging. Recovering filenames requires tracing every `resolveAppAsset:` call or brute-forcing hash mappings. Combined with anti-debugging, the effort approaches the cost of rewriting the app from scratch.
 
-**No remaining prebuilt binary blockers:** Both `tiverify.xcframework` and `titanium_prep` are now in source form. All hardening measures can be implemented by modifying the source code.
+**No remaining prebuilt binary blockers:** Both `tiverify.xcframework` and `titanium_prep` are now in source form. `ti.cloak` is being replaced entirely with a pure Node.js/Java implementation. All hardening measures can be implemented by modifying source code.
 
-**Practical recommendation:** The implemented quick wins eliminate the most exploitable vectors with minimal effort. The remaining measures (1, 2B/C, 4) require reimplementing `titanium_prep` and `tiverify.xcframework` with available source code. Until those binaries are replaced, the current implementation provides the best achievable protection without prebuilt binary modifications.
+**Practical recommendation:** The implemented quick wins eliminate the most exploitable vectors with minimal effort. The remaining iOS measures (1, 4B) require modifying `titanium_prep.js` and `tiverify`. Android hardening (A1-A5) requires replacing `ti.cloak` and rewriting `AssetCryptImpl.java`.

@@ -168,8 +168,8 @@ export class Packager {
 			await exec('node bin/download-all.js', { cwd: dir, stdio: 'inherit' });
 		}
 
-		// Include 'ti.cloak'
-		return unzip(path.join(ROOT_DIR, 'support', 'ti.cloak.zip'), path.join(this.zipSDKDir, 'node_modules'));
+		// ti.cloak has been replaced by inline crypto in the build scripts
+		return;
 	}
 
 	/**
@@ -290,7 +290,7 @@ export class Packager {
 	}
 
 	async copySupportDir() {
-		const ignoreDirs = [ 'packaged', '.pyc', path.join(SUPPORT_DIR, 'dev'), path.join(SUPPORT_DIR, 'ti.cloak.zip') ];
+		const ignoreDirs = [ 'packaged', '.pyc', path.join(SUPPORT_DIR, 'dev') ];
 		// Copy support/ into root, but filter out folders based on OS
 		if (this.targetOS !== 'osx') {
 			ignoreDirs.push(path.join(SUPPORT_DIR, 'iphone'), path.join(SUPPORT_DIR, 'osx'));

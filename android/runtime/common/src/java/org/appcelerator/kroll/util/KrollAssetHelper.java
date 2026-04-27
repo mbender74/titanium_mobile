@@ -42,6 +42,7 @@ public class KrollAssetHelper
 		InputStream openAsset(String path);
 		String readAsset(String path);
 		Collection<String> getAssetPaths();
+		boolean assetExists(String path);
 	}
 
 	public static void setAssetCrypt(AssetCrypt assetCrypt)
@@ -243,11 +244,8 @@ public class KrollAssetHelper
 		}
 
 		// First, check if path references an encrypted Titanium asset.
-		Collection<String> collection = getEncryptedAssetPaths();
-		if (collection != null) {
-			if (collection.contains(path)) {
-				return true;
-			}
+		if (assetCrypt != null && assetCrypt.assetExists(path)) {
+			return true;
 		}
 
 		// Next, check if path exists under APK "assets".
