@@ -16,6 +16,15 @@
 
 extern NSData *filterDataInRange(NSData *thedata, NSRange range);
 
+static unsigned int djb2_hash(const char *str)
+{
+  unsigned int hash = 5381;
+  int c;
+  while ((c = *str++))
+    hash = ((hash << 5) + hash) + c;
+  return hash;
+}
+
 #ifdef TI_ANTI_DEBUG
 static BOOL _isDebuggerAttached(void)
 {
@@ -44,7 +53,7 @@ static BOOL _isDebuggerAttached(void)
   // clang-format on
 
   NSNumber *index
-      = [map objectForKey:path];
+      = [map objectForKey:@(djb2_hash([path UTF8String]))];
   if (index == nil) {
     return nil;
   }

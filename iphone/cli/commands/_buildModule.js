@@ -551,7 +551,7 @@ FRAMEWORK_SEARCH_PATHS = $(inherited) "$(TITANIUM_SDK)/iphone/Frameworks/**"`);
 			renderData = {
 				moduleIdAsIdentifier: this.moduleIdAsIdentifier,
 				mainEncryptedAssetReturn: 'NSUInteger dlen = sizeof(data); NSMutableData *um = [NSMutableData dataWithLength:dlen]; UInt8 *ob = [um mutableBytes]; for (NSUInteger i = 0; i < dlen; i++) { ob[i] = data[i] ^ xmask[i % sizeof(xmask)]; } return filterDataInRange(um, ranges[0]);',
-				allEncryptedAssetsReturn: 'NSNumber *index = [map objectForKey:path];'
+				allEncryptedAssetsReturn: 'NSNumber *index = [map objectForKey:@(djb2_hash([path UTF8String]))];'
 					+ '\n  if (index == nil) {\n    return nil;\n  }'
 					+ '\n  NSUInteger dlen2 = sizeof(data); NSMutableData *um2 = [NSMutableData dataWithLength:dlen2]; UInt8 *ob2 = [um2 mutableBytes]; for (NSUInteger i = 0; i < dlen2; i++) { ob2[i] = data[i] ^ xmask[i % sizeof(xmask)]; } return filterDataInRange(um2, ranges[index.integerValue]);'
 			},

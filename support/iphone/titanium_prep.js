@@ -21,6 +21,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+// djb2 hash — matches the C implementation in ApplicationRouting.m / ModuleAssets.m.ejs
+function djb2(str) {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
+  }
+  return hash >>> 0; // unsigned 32-bit
+}
+
 const [, , appId, assetsDir, guid] = process.argv;
 
 if (!appId || !assetsDir || !guid) {
@@ -102,7 +111,7 @@ process.stdin.on('end', () => {
 	output += 'static NSDictionary *map = nil;\n';
 	output += '\tif (map == nil) {\n';
 	output += '\t\tmap = [[NSDictionary alloc] initWithObjectsAndKeys:\n';
-	const mapEntries = filenames.map((name, idx) => `[NSNumber numberWithInteger:${idx}], @"${name}"`);
+	const mapEntries = filenames.map((name, idx) => `[NSNumber numberWithInteger:${idx}], @(${djb2(name)})`);
 	output += `\t\t${mapEntries.join(',\n\t\t')},\n`;
 	output += '\t\tnil];\n';
 	output += '\t}\n';
