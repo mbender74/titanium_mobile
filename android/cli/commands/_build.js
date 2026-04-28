@@ -20,6 +20,7 @@ import async from 'async';
 import Builder from 'node-titanium-sdk/lib/builder.js';
 import { GradleWrapper } from '../lib/gradle-wrapper.js';
 import { ProcessJsTask } from '../../../cli/lib/tasks/process-js-task.js';
+import { obfuscateJsFiles } from '../../../cli/lib/tasks/obfuscate-js-task.js';
 import { ProcessDrawablesTask } from '../lib/process-drawables-task.js';
 import { ProcessSplashesTask } from '../lib/process-splashes-task.js';
 import Color from '../../../common/lib/color.js';
@@ -944,6 +945,13 @@ class AndroidBuilder extends Builder {
 			this.encryptJS = false;
 		}
 
+
+			const jsObfuscateArg = cli.argv['js-obfuscate'];
+			if (jsObfuscateArg) {
+				this.obfuscateJS = jsObfuscateArg === true ? 'low' : jsObfuscateArg;
+			} else if (cli.tiapp.properties['ti.js.obfuscate'] && cli.tiapp.properties['ti.js.obfuscate'].value) {
+				this.obfuscateJS = cli.tiapp.properties['ti.js.obfuscate'].value === 'true' ? 'low' : cli.tiapp.properties['ti.js.obfuscate'].value;
+			}
 		if (cli.tiapp.properties['ti.android.compilejs']) {
 			logger.warn(`The ${
 				'ti.android.compilejs'.cyan
@@ -2791,6 +2799,7 @@ class AndroidBuilder extends Builder {
 		// Finish doing the following after the above tasks have copied files to the build folder.
 		const templateDir = path.join(this.platformPath, 'templates', 'app', 'default', 'template', 'Resources', 'android');
 		return Promise.all([
+				this.obfuscateJSFiles(),
 			this.encryptJSFiles(),
 			this.ensureAppIcon(templateDir),
 			this.detectLegacySplashImage(),
@@ -2864,6 +2873,27 @@ class AndroidBuilder extends Builder {
 	/**
 	 * @returns {Promise<void>}
 	 */
+	async obfuscateJSFiles() {
+		if (!this.obfuscateJS) {
+			return;
+		}
+		const sdkCommonFolder = path.join(this.titaniumSdkPath, 'common', 'Resources', 'android');
+		const baseDir = this.encryptJS ? this.buildAssetsDir : this.buildAppMainAssetsResourcesDir;
+		const jsFiles = this.encryptJS
+			? this.jsFilesToEncrypt.map(f => f)
+			: Object.keys(this.jsFiles || {}).map(k => k);
+		if (!jsFiles.length) {
+			return;
+		}
+		await obfuscateJsFiles({
+			logger: this.logger,
+			jsFiles,
+			baseDir,
+			sdkCommonFolder,
+			level: this.obfuscateJS
+		});
+	}
+
 	async encryptJSFiles() {
 		if (!this.jsFilesToEncrypt.length) {
 			// nothing to encrypt, continue
@@ -2874,16 +2904,21 @@ class AndroidBuilder extends Builder {
 
 		const crypto = await import('node:crypto');
 
-		// Generate random key, salt (IV), and XOR mask
-		const key = crypto.randomBytes(16);
-		const salt = crypto.randomBytes(16);
-		const xmask = crypto.randomBytes(16);
+		// Generate seed arrays for key/IV derivation
+		// key = SHA256(seed0 XOR seed1)[0:16], iv = SHA256(seed2 XOR seed3)[0:16]
+		const seed0 = crypto.randomBytes(32);
+		const seed1 = crypto.randomBytes(32);
+		const seed2 = crypto.randomBytes(32);
+		const seed3 = crypto.randomBytes(32);
 
-		// XOR-mask the key for embedding in Java
-		const maskedKey = Buffer.alloc(16);
-		for (let i = 0; i < 16; i++) {
-			maskedKey[i] = key[i] ^ xmask[i % xmask.length];
+		const xor01 = Buffer.alloc(32);
+		const xor23 = Buffer.alloc(32);
+		for (let i = 0; i < 32; i++) {
+			xor01[i] = seed0[i] ^ seed1[i];
+			xor23[i] = seed2[i] ^ seed3[i];
 		}
+		const key = crypto.createHash('sha256').update(xor01).digest().subarray(0, 16);
+		const salt = crypto.createHash('sha256').update(xor23).digest().subarray(0, 16);
 
 		// djb2 hash for asset path lookup
 		const djb2 = (str) => {
@@ -2923,9 +2958,10 @@ class AndroidBuilder extends Builder {
 				await fs.readFile(path.join(this.templatesDir, '_T5C.java'), 'utf8'),
 				{
 					appid: this.appid,
-					xmask: formatBytes(xmask),
-					maskedKey: formatBytes(maskedKey),
-					salt: formatBytes(salt),
+					s0: formatBytes(seed0),
+					s1: formatBytes(seed1),
+					s2: formatBytes(seed2),
+					s3: formatBytes(seed3),
 					assetHashes: this.jsFilesToEncrypt.map(f => djb2('Resources/' + f.replace(/\\/g, '/')) + 'L').join(', '),
 					antiDebug: this.deployType === 'production'
 				}

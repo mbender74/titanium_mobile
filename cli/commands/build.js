@@ -75,6 +75,10 @@ export function config(logger, config, cli) {
 						'source-maps': {
 							desc: 'generate inline source maps for transpiled JS files'
 						},
+						'js-obfuscate': {
+							default: false,
+							desc: 'obfuscate JavaScript files; values: low, medium, high (default: low)'
+						},
 					},
 					options: appc.util.mix({
 						platform: {

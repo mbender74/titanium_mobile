@@ -5,10 +5,12 @@
 The Titanium SDK encrypts JavaScript files in production builds to prevent easy extraction from the app binary. Starting with SDK 13.3.0, the encryption system has been significantly hardened on both iOS and Android:
 
 - **Hash-based asset lookup**: Filenames are replaced with djb2 hash values — no plaintext filenames appear in the compiled binary
-- **XOR-masked encryption keys**: The AES key is XOR-masked with a random mask, making static extraction infeasible
+- **Obfuscated key computation**: AES key and IV are derived at runtime via SHA-256 from 4 scattered seed arrays — no key stored contiguously in the binary
+- **XOR-masked data and ranges**: The encrypted data blob and NSRange arrays (iOS) are XOR-masked to resist static analysis
 - **Anti-debug protection**: Production builds refuse to decrypt when a debugger is attached
-- **Class name obfuscation**: Internal routing classes use opaque names (`_T5Routing`, `_T5A`) instead of revealing names
+- **Class name obfuscation**: Internal routing classes use opaque names (`_T5Routing`, `_T5A`, `_T5C`) instead of revealing names
 - **No `_index_.json`**: The file index is omitted from encrypted builds to prevent filename leakage
+- **JS obfuscation** (opt-in): `--js-obfuscate` applies code obfuscation before encryption, making recovered code harder to reverse
 
 ## Encryption by Deploy Type
 
@@ -39,9 +41,10 @@ The Titanium SDK encrypts JavaScript files in production builds to prevent easy 
 - JS files are encrypted with AES-128-CBC and stored as `.bin` files
 - `_index_.json` is **not** written (prevents filename leakage)
 - Filenames are replaced with djb2 hash values in the lookup dictionary
-- Encryption keys are XOR-masked before embedding
+- AES key and IV are derived at runtime via SHA-256 from 4 scattered seed arrays
+- The encrypted data blob and NSRange arrays (iOS) are XOR-masked
 - Anti-debug checks are active in production builds (iOS: `sysctl` P_TRACED check; Android: `Debug.isDebuggerConnected()`)
-- On iOS: class names are obfuscated (`_T5Routing` instead of `ApplicationRouting`)
+- Class names are obfuscated (`_T5Routing` on iOS, `_T5C` on Android)
 
 ## CLI Options
 
@@ -83,6 +86,31 @@ ti build -p ios --target dist-appstore --skip-js-minify
 
 Note: Simulator builds never minify JS regardless of this flag.
 
+### `--js-obfuscate`
+
+Applies JavaScript obfuscation to make recovered code harder to reverse-engineer. This is an opt-in feature — by default, JS files are only minified and encrypted, not obfuscated. Obfuscation is applied **after** minification and **before** encryption.
+
+```bash
+ti build -p ios --target dist-appstore --js-obfuscate
+ti build -p ios --target dist-appstore --js-obfuscate medium
+ti build -p android --target dist-appstore --js-obfuscate high
+```
+
+**Obfuscation levels:**
+
+| Level | Description | Build Time Impact | Reverse Engineering Effort |
+|-------|-------------|-------------------|--------------------------|
+| `low` | Number encoding, simple transforms | Minimal | Low — mostly cosmetic |
+| `medium` | Identifier renaming, string array, control flow flattening | Moderate | Medium — requires deobfuscation tools |
+| `high` | Full control flow flattening, dead code injection, self-defending (disabled) | Significant | High — significant effort to deobfuscate |
+
+**Important safeguards:** The obfuscator is configured with `ignoreImports: true`, `renameGlobals: false`, and `renameProperties: false` to preserve compatibility with Titanium's module system. Reserved names include `Ti`, `Titanium`, `require`, `module`, `exports`, `global`, `kroll`, and `globalThis`.
+
+Use this when:
+- Your app contains proprietary business logic in JS that you want to protect beyond encryption
+- You want to increase the effort required to understand recovered JS code
+- Combined with `--always-js-encrypt`, this provides defense-in-depth
+
 ## tiapp.xml Properties
 
 You can also control encryption via `<property>` elements in `tiapp.xml`. These are evaluated after the deploy-type defaults, so they override the default behavior.
@@ -103,6 +131,14 @@ This is equivalent to `--always-js-encrypt` on every build. Useful when you want
 
 This is equivalent to `--skip-js-encrypt` on every build. Useful for rapid development iteration where build speed matters more than security.
 
+### JS obfuscation via tiapp.xml
+
+```xml
+<property name="ti.js.obfuscate" type="string">medium</property>
+```
+
+Accepts `low`, `medium`, or `high` (same as the `--js-obfuscate` flag). Setting it to `true` defaults to `low`.
+
 ### Priority order
 
 CLI flags take precedence over tiapp.xml properties:
@@ -110,6 +146,7 @@ CLI flags take precedence over tiapp.xml properties:
 ```
 --always-js-encrypt  >  ti.always.encryptjs  →  encryptJS = true
 --skip-js-encrypt    >  ti.skip.encryptjs     →  encryptJS = false
+--js-obfuscate       >  ti.js.obfuscate       →  obfuscateJS = level
 ```
 
 If both `--always-js-encrypt` and `--skip-js-encrypt` are specified, `--skip-js-encrypt` wins (it is evaluated second).
@@ -121,11 +158,14 @@ If both `--always-js-encrypt` and `--skip-js-encrypt` are specified, `--skip-js-
 When `encryptJS = true`:
 
 1. JS files are encrypted by `titanium_prep.js` (Node.js, replaces the old prebuilt binary)
-2. Encrypted data is XOR-masked and embedded in `_T5Routing` (renamed from `ApplicationRouting`)
-3. Dictionary keys are djb2 hash integers — no filenames in the binary
-4. The `_index_.json` file is not written
-5. Anti-debug check uses `sysctl(KERN_PROC)` with `P_TRACED` flag (production only)
-6. Module JS files use the same encryption via `_T5A` class (renamed from `ModuleAssets`)
+2. 4 random 32-byte seed arrays are generated; key/IV derived via `SHA256(seed0 XOR seed1)[:16]` / `SHA256(seed2 XOR seed3)[:16]`
+3. Encrypted data is XOR-masked and embedded in `_T5Routing` (renamed from `ApplicationRouting`)
+4. NSRange arrays are XOR-encrypted with a random `rmask[]` key
+5. Dictionary keys are djb2 hash integers — no filenames in the binary
+6. The `_index_.json` file is not written
+7. Anti-debug check uses `sysctl(KERN_PROC)` with `P_TRACED` flag (production only)
+8. Derived key/IV are zeroed after use (`memset`)
+9. Module JS files use the same encryption via `_T5A` class (renamed from `ModuleAssets`)
 
 When `encryptJS = false`:
 
@@ -138,12 +178,13 @@ When `encryptJS = false`:
 When `encryptJS = true`:
 
 1. JS files are encrypted with AES-128-CBC by the build system (pure Node.js `crypto`, replaces `ti.cloak`)
-2. The `_T5C` class (renamed from `AssetCryptImpl`) handles decryption at runtime
-3. The AES key is XOR-masked before embedding in Java — not stored as plaintext
-4. Asset paths are stored as djb2 hash values — no filenames in the DEX
-5. Anti-debug check uses `Debug.isDebuggerConnected()` (production only)
-6. Class name is obfuscated (`_T5C` instead of `AssetCryptImpl`)
-7. No native `.so` library is needed (the old `libti.cloak.so` has been replaced)
+2. 4 random 32-byte seed arrays are generated; key/IV derived via `SHA256(seed0 XOR seed1)[:16]` / `SHA256(seed2 XOR seed3)[:16]`
+3. The `_T5C` class (renamed from `AssetCryptImpl`) handles decryption at runtime
+4. AES key/IV are derived from seed arrays using `MessageDigest` SHA-256 — not stored as plaintext or simple XOR mask
+5. Asset paths are stored as djb2 hash values — no filenames in the DEX
+6. Anti-debug check uses `Debug.isDebuggerConnected()` (production only)
+7. Class name is obfuscated (`_T5C` instead of `AssetCryptImpl`)
+8. No native `.so` library is needed (the old `libti.cloak.so` has been replaced)
 
 When `encryptJS = false`:
 
@@ -224,9 +265,11 @@ In your `tiapp.xml`:
 |---------|--------|-------|
 | `encryptJS` default | `true` for all deploy types | `true` for production only |
 | Asset filenames | Plaintext `@"filename"` strings in ObjC dictionary | djb2 hash integers `@(hashValue)` |
-| Encryption key | Last 32 bytes of data blob (iOS) / XOR with plaintext salt (Android) | XOR-masked with random 16-byte key |
+| Encryption key | Last 32 bytes of data blob (iOS) / XOR with plaintext salt (Android) | SHA-256 derivation from 4 scattered seed arrays |
 | `_index_.json` | Written in all builds | Omitted when `encryptJS = true` |
 | Class names | `ApplicationRouting`, `ModuleAssets`, `AssetCryptImpl` | `_T5Routing`, `_T5A`, `_T5C` |
+| NSRange array (iOS) | Plaintext `NSRange[]` structs | XOR-encrypted with `rmask[]` |
+| JS obfuscation | Not available | `--js-obfuscate` flag (low/medium/high) |
 | Anti-debug | Not implemented | `sysctl` P_TRACED check (iOS), `Debug.isDebuggerConnected()` (Android) |
 | `--always-js-encrypt` | Not available | New CLI flag |
 | `--skip-js-encrypt` | Available, but less needed | Available, now more useful |

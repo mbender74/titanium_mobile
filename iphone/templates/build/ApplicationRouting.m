@@ -8,13 +8,14 @@
  */
 
 #import "ApplicationRouting.h"
+#import <CommonCrypto/CommonDigest.h>
 #import <Foundation/Foundation.h>
 #ifdef TI_ANTI_DEBUG
 #import <sys/sysctl.h>
 #import <sys/types.h>
 #endif
 
-extern NSData *filterDataInRange(NSData *thedata, NSRange range);
+extern NSData *filterDataInRange(NSData *thedata, NSRange range, const void *key, const void *iv);
 
 static unsigned int djb2_hash(const char *str)
 {
@@ -39,6 +40,25 @@ static BOOL _isDebuggerAttached(void)
 }
 #endif
 
+static void deriveKeyAndIV(UInt8 *keyOut, UInt8 *ivOut)
+{
+  // key = SHA256(_s0 XOR _s1)[0:16]
+  UInt8 tmp[32];
+  for (int i = 0; i < 32; i++) {
+    tmp[i] = _s0[i] ^ _s1[i];
+  }
+  unsigned char hash[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(tmp, 32, hash);
+  memcpy(keyOut, hash, 16);
+
+  // iv = SHA256(_s2 XOR _s3)[0:16]
+  for (int i = 0; i < 32; i++) {
+    tmp[i] = _s2[i] ^ _s3[i];
+  }
+  CC_SHA256(tmp, 32, hash);
+  memcpy(ivOut, hash, 16);
+}
+
 @implementation _T5Routing
 
 + (NSData *)resolveAppAsset:(NSString *)path;
@@ -57,14 +77,36 @@ static BOOL _isDebuggerAttached(void)
   if (index == nil) {
     return nil;
   }
-  // XOR-unmask the data blob before decryption
+
+  // XOR-unmask the data blob
   NSUInteger dataLen = sizeof(data);
   NSMutableData *unmasked = [NSMutableData dataWithLength:dataLen];
   UInt8 *outBytes = [unmasked mutableBytes];
   for (NSUInteger i = 0; i < dataLen; i++) {
     outBytes[i] = data[i] ^ xmask[i % sizeof(xmask)];
   }
-  return filterDataInRange(unmasked, ranges[index.integerValue]);
+
+  // Unmask the ranges
+  NSUInteger rangeBytesLen = range_count * sizeof(NSRange);
+  NSRange *unmaskedRanges = (NSRange *)malloc(rangeBytesLen);
+  for (NSUInteger i = 0; i < rangeBytesLen; i++) {
+    ((UInt8 *)unmaskedRanges)[i] = masked_ranges[i] ^ rmask[i % sizeof(rmask)];
+  }
+
+  // Derive key and IV from seed arrays
+  UInt8 derivedKey[16];
+  UInt8 derivedIV[16];
+  deriveKeyAndIV(derivedKey, derivedIV);
+
+  NSRange range = unmaskedRanges[index.integerValue];
+  NSData *result = filterDataInRange(unmasked, range, derivedKey, derivedIV);
+
+  // Securely zero derived key/IV
+  memset(derivedKey, 0, sizeof(derivedKey));
+  memset(derivedIV, 0, sizeof(derivedIV));
+  free(unmaskedRanges);
+
+  return result;
 }
 
 @end

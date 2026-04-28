@@ -8,21 +8,17 @@
 #import "TiVerify.h"
 #import <CommonCrypto/CommonCryptor.h>
 
-NSData *filterDataInRange(NSData *thedata, NSRange range)
+NSData *filterDataInRange(NSData *thedata, NSRange range, const void *key, const void *iv)
 {
   if (!thedata) {
     return nil;
   }
 
   NSUInteger length = [thedata length];
-  if (length < 32) {
+  if (length < 1) {
     NSLog(@"[ERROR] Error retrieving data");
     return [NSData data];
   }
-
-  // Key is 16 bytes at offset (length - 32), IV is 16 bytes at offset (length - 16)
-  const void *key = [thedata bytes] + length - 32;
-  const void *iv = [thedata bytes] + length - 16;
 
   // Data to decrypt starts at range.location
   const void *dataIn = [thedata bytes] + range.location;

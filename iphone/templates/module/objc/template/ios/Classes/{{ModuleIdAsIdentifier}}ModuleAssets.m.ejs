@@ -2,12 +2,13 @@
  * This is a generated file. Do not edit or your changes will be lost
  */
 #import "<%- moduleIdAsIdentifier %>ModuleAssets.h"
+#import <CommonCrypto/CommonDigest.h>
 #ifdef TI_ANTI_DEBUG
 #import <sys/types.h>
 #import <sys/sysctl.h>
 #endif
 
-extern NSData* filterDataInRange(NSData* thedata, NSRange range);
+extern NSData* filterDataInRange(NSData* thedata, NSRange range, const void *key, const void *iv);
 
 static unsigned int djb2_hash(const char *str)
 {
@@ -16,6 +17,23 @@ static unsigned int djb2_hash(const char *str)
   while ((c = *str++))
     hash = ((hash << 5) + hash) + c;
   return hash;
+}
+
+static void deriveKeyAndIV(UInt8 *keyOut, UInt8 *ivOut)
+{
+  UInt8 tmp[32];
+  for (int i = 0; i < 32; i++) {
+    tmp[i] = _s0[i] ^ _s1[i];
+  }
+  unsigned char hash[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(tmp, 32, hash);
+  memcpy(keyOut, hash, 16);
+
+  for (int i = 0; i < 32; i++) {
+    tmp[i] = _s2[i] ^ _s3[i];
+  }
+  CC_SHA256(tmp, 32, hash);
+  memcpy(ivOut, hash, 16);
 }
 
 #ifdef TI_ANTI_DEBUG

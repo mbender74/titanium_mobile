@@ -4,6 +4,7 @@ import android.os.Debug;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Arrays;
 
 import javax.crypto.Cipher;
@@ -28,31 +29,66 @@ public class _T5C implements KrollAssetHelper.AssetCrypt
 	}
 <% } %>
 
-	// XOR-masked key: real key = maskedKey[i] ^ xmask[i % xmask.length]
-	private static byte[] xmask = {
-		<%- xmask %>
+	// Seed arrays for key derivation: key = SHA256(_s0 XOR _s1)[0:16], iv = SHA256(_s2 XOR _s3)[0:16]
+	private static byte[] _s0 = {
+		<%- s0 %>
 	};
-	private static byte[] maskedKey = {
-		<%- maskedKey %>
+	private static byte[] _s1 = {
+		<%- s1 %>
+	};
+	private static byte[] _s2 = {
+		<%- s2 %>
+	};
+	private static byte[] _s3 = {
+		<%- s3 %>
 	};
 
-	// IV (salt) for AES-128-CBC
-	private static byte[] salt = {
-		<%- salt %>
-	};
+	// Cached derived key and IV
+	private static byte[] cachedKey = null;
+	private static byte[] cachedIV = null;
 
 	// djb2 hashes of asset paths (no plaintext filenames in the binary)
 	private static final long[] ASSET_HASHES = {
 		<%- assetHashes %>
 	};
 
+	private static void deriveKeyAndIV()
+	{
+		if (cachedKey != null) return;
+
+		try {
+			MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+
+			// key = SHA256(_s0 XOR _s1)[0:16]
+			byte[] xor01 = new byte[32];
+			for (int i = 0; i < 32; i++) {
+				xor01[i] = (byte)(_s0[i] ^ _s1[i]);
+			}
+			byte[] hash01 = sha256.digest(xor01);
+			cachedKey = Arrays.copyOf(hash01, 16);
+
+			// iv = SHA256(_s2 XOR _s3)[0:16]
+			byte[] xor23 = new byte[32];
+			for (int i = 0; i < 32; i++) {
+				xor23[i] = (byte)(_s2[i] ^ _s3[i]);
+			}
+			byte[] hash23 = sha256.digest(xor23);
+			cachedIV = Arrays.copyOf(hash23, 16);
+		} catch (Exception e) {
+			Log.e(TAG, "Key derivation failed: " + e.toString());
+		}
+	}
+
 	private static byte[] getKey()
 	{
-		byte[] key = new byte[16];
-		for (int i = 0; i < 16; i++) {
-			key[i] = (byte)(maskedKey[i] ^ xmask[i % xmask.length]);
-		}
-		return key;
+		deriveKeyAndIV();
+		return cachedKey;
+	}
+
+	private static byte[] getIV()
+	{
+		deriveKeyAndIV();
+		return cachedIV;
 	}
 
 	private static long djb2(String str)
@@ -117,7 +153,7 @@ public class _T5C implements KrollAssetHelper.AssetCrypt
 		}
 		try {
 			Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-			cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(getKey(), "AES"), new IvParameterSpec(salt));
+			cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(getKey(), "AES"), new IvParameterSpec(getIV()));
 			return new CipherInputStream(KrollAssetHelper.getAssetManager().open(path), cipher);
 		} catch (Exception e) {
 			Log.e(TAG, "Could not decrypt '" + path + "'");

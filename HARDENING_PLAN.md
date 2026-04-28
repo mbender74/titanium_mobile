@@ -382,7 +382,7 @@ The Android encryption system uses `ti.cloak` — a closed-source module that ha
 | Aspect | Pure Java (current) | Native `.so` (old ti.cloak) |
 |---|---|---|
 | Filenames in binary | djb2 hashes only (irreversible) | Plaintext strings in `assets` collection |
-| Key extraction | XOR-masked — must find `xmask[]` + `maskedKey[]` and unmask | `KEY_BLOCK` at exported symbol, XOR with plaintext salt |
+| Key extraction | SHA-256 derivation — must trace 4 seed arrays through SHA-256 | `KEY_BLOCK` at exported symbol, XOR with plaintext salt |
 | Runtime extraction | Blocked by `Debug.isDebuggerConnected()` | `verifyApplication()` trivially bypassed |
 | Reverse engineering effort | `jadx` decompiles DEX in seconds | `objdump`/Ghidra analyzes `.so` in minutes |
 | Dynamic extraction | Frida hooks Java methods | Frida hooks JNI (`getKey()` return value) |
@@ -411,13 +411,13 @@ The old `ti.cloak` was actually **less secure** than the current pure-Java appro
 
 **Implementation:** Add `djb2()` and `assetExists()` methods to `_T5C.java`. Build script computes hashes from asset paths and outputs them as `long[]` literals.
 
-### Measure A3: XOR-Masked Key
+### Measure A3: XOR-Masked Key → Superseded by A6
 
-**Description:** The AES key embedded in `_T5C.java` is XOR-masked with a random 16-byte mask. At runtime, `getKey()` unmasks the key before using it. This mirrors the iOS `xmask[]` approach.
+**Description:** The AES key was originally XOR-masked with a random 16-byte mask in `_T5C.java`. This has been superseded by Measure A6 (obfuscated key computation), which uses SHA-256 derivation from 4 scattered seed arrays instead of simple XOR masking.
 
-**Impact:** Defeats static key extraction from decompiled Java. An attacker must trace the XOR-unmasking at runtime.
+**Impact:** Defeated static key extraction from decompiled Java. Now replaced by the stronger SHA-256 approach (A6).
 
-**Equivalent iOS measure:** Measure 4C (XOR-mask data blob)
+**Equivalent iOS measure:** Measure 4C (XOR-mask data blob) → superseded by Measure 1D
 
 ### Measure A4: Anti-Debug Check
 
@@ -435,15 +435,15 @@ The old `ti.cloak` was actually **less secure** than the current pure-Java appro
 
 **Equivalent iOS measure:** Measure 5A (class name obfuscation)
 
-### Measure A6: Obfuscated Key Computation (Phase 1) — NOT YET IMPLEMENTED
+### Measure A6: Obfuscated Key Computation (Phase 1) — IMPLEMENTED
 
-**Description:** Replace the current trivial XOR-mask key embedding (`maskedKey[i] ^ xmask[i % xmask.length]`) with multi-step key derivation from multiple scattered seed values. At build time, generate N random seed byte arrays and a derivation chain specification. At runtime, compute the AES key via SHA-256 chains and XOR operations across the seeds. The key is still derivable from data in the binary, but the computation resists automated scanning and simple hex dumps.
+**Description:** Replaces the trivial XOR-mask key embedding with multi-step SHA-256 key derivation from 4 scattered seed arrays. At build time, 4 random 32-byte seed arrays (`_s0`, `_s1`, `_s2`, `_s3`) are generated. At runtime: `key = SHA256(_s0 XOR _s1)[0:16]`, `iv = SHA256(_s2 XOR _s3)[0:16]`. The key is still derivable from data in the binary, but the computation resists automated scanning and simple hex dumps.
 
-**Impact:** Defeats casual key extraction. Raises static analysis effort from "search for byte arrays and XOR" to "trace a multi-step computation." Dynamic analysis with Frida still recovers the key in minutes.
+**Impact:** Defeats casual key extraction. Raises static analysis effort from "search for byte arrays and XOR" to "trace a multi-step SHA-256 computation." Dynamic analysis with Frida still recovers the key in minutes.
 
 **Equivalent iOS measure:** Measure 1D (obfuscated key computation)
 
-**Implementation:** Add `deriveKey()` method to `_T5C.java` that computes the key from scattered `private static byte[] _sN` seed arrays. Build script generates seeds and derivation chain, outputs them as Java byte array literals. On iOS, add equivalent `deriveKeyAndIV()` C function in `ApplicationRouting.m`.
+**Implementation:** `deriveKeyAndIV()` method in `_T5C.java` uses `MessageDigest.getInstance("SHA-256")` to compute key/IV from seed arrays. Build script generates 4 seed arrays, derives key/IV via SHA-256 before encryption, and passes seed arrays to the EJS template. Replaces the old `xmask[]`, `maskedKey[]`, `salt[]` approach.
 
 ### Measure A7: Android Keystore Migration (Phase 2) — NOT YET IMPLEMENTED
 
@@ -468,14 +468,14 @@ Three critical components in the encryption pipeline were prebuilt binaries with
 | Binary | Location | Purpose | Status |
 |--------|----------|---------|--------|
 | `titanium_prep` | `support/iphone/titanium_prep` | Build-time tool that generates `data[]`, `ranges[]`, key+IV, and `initWithObjectsAndKeys:` dictionary | **Replaced** — reimplemented as `support/iphone/titanium_prep.js` |
-| `tiverify.xcframework` | `iphone/lib/tiverify.xcframework/` | Runtime library providing `filterDataInRange(NSData* thedata, NSRange range)` — performs AES-128-CBC decryption | **Replaced** — reimplemented in `iphone/lib/tiverify_src/` |
+| `tiverify.xcframework` | `iphone/lib/tiverify.xcframework/` | Runtime library providing `filterDataInRange(NSData* thedata, NSRange range, const void *key, const void *iv)` — performs AES-128-CBC decryption | **Replaced** — reimplemented in `iphone/lib/tiverify_src/` |
 | `ti.cloak` | `support/ti.cloak.zip`, `android/titanium/lib/ti.cloak.jar` | Build-time encryption + runtime decryption for Android | **Replaced** — pure Node.js (build) + Java (runtime) |
 
 **No remaining prebuilt binary blockers.** All hardening measures can be implemented by modifying source code.
 
-**`tiverify.xcframework` reimplementation:** The original binary was reverse-engineered by analyzing the exported symbol `_filterDataInRange`, tracing the disassembly across x86_64 and arm64 slices, and identifying the use of Apple's CommonCrypto `CCCrypt` function. The reimplementation in `iphone/lib/tiverify_src/TiVerify.m` is functionally identical: AES-128-CBC decryption with PKCS7 padding, key and IV extracted from the last 32 bytes of the data blob. The xcframework has been rebuilt for ios-arm64, ios-arm64_x86_64-maccatalyst, and ios-arm64_x86_64-simulator slices.
+**`tiverify.xcframework` reimplementation:** The original binary was reverse-engineered by analyzing the exported symbol `_filterDataInRange`, tracing the disassembly across x86_64 and arm64 slices, and identifying the use of Apple's CommonCrypto `CCCrypt` function. The reimplementation in `iphone/lib/tiverify_src/TiVerify.m` now accepts key and IV as explicit parameters (instead of extracting them from the data blob), enabling obfuscated key computation. The xcframework has been rebuilt for ios-arm64, ios-arm64_x86_64-maccatalyst, and ios-arm64_x86_64-simulator slices.
 
-**All blockers resolved:** Both `tiverify.xcframework` and `titanium_prep` are now in source form. Measures 1D, 1B, 2B/C, and 4B can be implemented by modifying the open-source replacements.
+**All blockers resolved:** Both `tiverify.xcframework` and `titanium_prep` are now in source form. Measures 1D, 1B, 2B/C, 4B, and JS obfuscation can be implemented by modifying the open-source replacements.
 
 ---
 
@@ -501,14 +501,15 @@ Three critical components in the encryption pipeline were prebuilt binaries with
 | A3 | XOR-masked key | Android | ✅ Implemented |
 | A4 | Anti-debug check | Android | ✅ Implemented |
 | A5 | Class name obfuscation | Android | ✅ Implemented |
-| A6 | Obfuscated key computation (Phase 1) | Android | ❌ Not implemented |
+| A6 | Obfuscated key computation (Phase 1) | Android | ✅ Implemented |
 | A7 | Android Keystore migration (Phase 2) | Android | ❌ Not implemented |
 | — | `titanium_prep` Node.js replacement | iOS | ✅ Implemented |
 | — | `tiverify.xcframework` rebuild from source | iOS | ✅ Implemented |
 | — | JS kernel fallback for missing `_index_.json` | iOS | ✅ Implemented |
-| 1D | Obfuscated key computation (Phase 1) | Both | ❌ Not implemented |
+| 1D | Obfuscated key computation (Phase 1) | Both | ✅ Implemented |
 | 1B | Keystore/Keychain migration (Phase 2) | Both | ❌ Not implemented |
-| 4B | Encrypt NSRange array | iOS | ❌ Not implemented |
+| — | JS obfuscation (`--js-obfuscate`) | Both | ✅ Implemented |
+| 4B | Encrypt NSRange array (rmask XOR) | iOS | ✅ Implemented |
 | 5C | Strip ObjC metadata | iOS | 📝 Documented (manual step) |
 
 ### Quick Wins (No prebuilt binary dependency) — IMPLEMENTED
@@ -691,18 +692,18 @@ This recompiles `TiVerify.m` from source and replaces `iphone/lib/tiverify.xcfra
 | ~~10~~ | ~~Anti-debug check Android (A4)~~ | Low | Low | ✅ Implemented |
 | ~~11~~ | ~~Class name obfuscation Android (A5)~~ | Medium | Low | ✅ Implemented |
 | ~~12~~ | ~~Production-only encryptJS defaults~~ | High | Low | ✅ Implemented |
-| 13 | Obfuscated key computation (1D: Phase 1) | High | Low | ❌ Next |
-| 14 | Keystore/Keychain migration (1B: Phase 2) | Critical | Medium | ❌ After 1D |
-| 15 | Encrypt NSRange array (4B) | Medium | Medium | ❌ Not implemented |
+| ~~13~~ | ~~Obfuscated key computation (1D: Phase 1)~~ | ~~High~~ | ~~Low~~ | ✅ Implemented |
+| 13 | Keystore/Keychain migration (1B: Phase 2) | Critical | Medium | ❌ Next |
+| ~~15~~ | ~~Encrypt NSRange array (4B)~~ | ~~Medium~~ | ~~Medium~~ | ✅ Implemented |
 
 ## Effectiveness Assessment
 
-**Current state:** An attacker with only the IPA/APK file (no device access) can recover 100% of JS source files. On iOS, the key is the last 32 bytes of the data blob (trivially extractable). On Android, the key is XOR-masked with an embedded mask (equally trivial).
+**Current state:** An attacker with only the IPA/APK file (no device access) can recover 100% of JS source files. On iOS, the key is now derived via SHA-256 from scattered seed arrays (static extraction harder). On Android, the same SHA-256 derivation applies. However, dynamic analysis (Frida) still recovers keys in minutes. JS obfuscation makes recovered code harder to reverse.
 
-**After implemented measures:** Static analysis is significantly harder on both platforms. Filenames are no longer in plaintext (must trace runtime or brute-force hashes), `_index_.json` is gone, class names are obfuscated, and debugging is blocked. An attacker would need to use entropy analysis and dynamic tracing, raising effort from minutes to hours. On Android, `ti.cloak` is eliminated entirely — keys are XOR-masked, filenames are djb2 hashes, and anti-debug protection is active in production.
+**After implemented measures:** Static analysis is significantly harder on both platforms. Filenames are no longer in plaintext (must trace runtime or brute-force hashes), `_index_.json` is gone, class names are obfuscated, debugging is blocked, keys are derived via SHA-256 from scattered seeds, ranges are XOR-encrypted, and JS obfuscation makes recovered code harder to reverse. An attacker would need to use entropy analysis and dynamic tracing, raising effort from minutes to hours. On Android, `ti.cloak` is eliminated entirely — keys are SHA-256-derived, filenames are djb2 hashes, and anti-debug protection is active in production.
 
-**After Measure 1D (obfuscated key computation — Phase 1):** The key is no longer trivially extractable via hex dump or simple XOR inversion. An attacker must trace a multi-step SHA-256 computation chain or use dynamic analysis (Frida breakpoint at `CCCrypt`/`Cipher.init`). Raises static analysis effort from minutes to hours. Dynamic analysis with Frida still recovers the key in minutes.
+**After Measure 1D (obfuscated key computation — Phase 1):** ✅ Implemented. The key is no longer trivially extractable via hex dump or simple XOR inversion. An attacker must trace a multi-step SHA-256 computation chain through 4 scattered seed arrays or use dynamic analysis (Frida breakpoint at `CCCrypt`/`Cipher.init`). Raises static analysis effort from minutes to hours. Dynamic analysis with Frida still recovers the key in minutes.
 
 **After Measure 1B (Keystore/Keychain migration — Phase 2):** After first-launch migration, no encryption key exists in the binary's attack surface. The transport key is only a vulnerability during the first-launch window. Subsequent launches use a hardware-backed key that cannot be extracted from the IPA/APK alone. An attacker needs physical device access + jailbreak/root + Keystore/Keychain extraction.
 
-**Remaining gaps (iOS only):** Measure 4B (encrypted NSRange array) would further harden iOS by obfuscating the file boundary metadata.
+**Remaining gaps:** Measure 1B (Keystore/Keychain migration — Phase 2) would eliminate the key from the binary entirely after first-launch. JS obfuscation (`--js-obfuscate`) is now available to make recovered code harder to reverse.

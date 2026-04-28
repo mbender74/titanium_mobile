@@ -8,16 +8,15 @@
 #import <Foundation/Foundation.h>
 
 /**
- * Decrypts a range of data from an encrypted blob.
+ * Decrypts a range of data from an encrypted blob using the provided key and IV.
  *
- * The data blob format is:
- *   [encrypted_payload | 16-byte AES-128 key | 16-byte IV]
+ * The key and IV are derived at runtime from seed arrays using SHA-256,
+ * not embedded in the data blob.
  *
- * The last 32 bytes of thedata contain the key and IV used for
- * AES-128-CBC decryption with PKCS7 padding.
- *
- * @param thedata  The encrypted data blob (key+IV are the last 32 bytes)
- * @param range    The range within thedata to decrypt (excluding the trailing key+IV)
+ * @param thedata  The XOR-unmasked encrypted data blob
+ * @param range    The range within thedata to decrypt
+ * @param key      Pointer to the 16-byte AES-128 decryption key
+ * @param iv       Pointer to the 16-byte AES-128 IV
  * @return         Decrypted data, or empty NSData on failure
  */
-NSData *filterDataInRange(NSData *thedata, NSRange range);
+NSData *filterDataInRange(NSData *thedata, NSRange range, const void *key, const void *iv);

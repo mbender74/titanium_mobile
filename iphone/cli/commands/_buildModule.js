@@ -550,10 +550,10 @@ FRAMEWORK_SEARCH_PATHS = $(inherited) "$(TITANIUM_SDK)/iphone/Frameworks/**"`);
 			jsFile = path.join(this.assetsDir, moduleJS),
 			renderData = {
 				moduleIdAsIdentifier: this.moduleIdAsIdentifier,
-				mainEncryptedAssetReturn: 'NSUInteger dlen = sizeof(data); NSMutableData *um = [NSMutableData dataWithLength:dlen]; UInt8 *ob = [um mutableBytes]; for (NSUInteger i = 0; i < dlen; i++) { ob[i] = data[i] ^ xmask[i % sizeof(xmask)]; } return filterDataInRange(um, ranges[0]);',
+				mainEncryptedAssetReturn: 'NSUInteger dlen = sizeof(data); NSMutableData *um = [NSMutableData dataWithLength:dlen]; UInt8 *ob = [um mutableBytes]; for (NSUInteger i = 0; i < dlen; i++) { ob[i] = data[i] ^ xmask[i % sizeof(xmask)]; } NSUInteger rblen = range_count * sizeof(NSRange); NSRange *ur = (NSRange *)malloc(rblen); for (NSUInteger i = 0; i < rblen; i++) { ((UInt8 *)ur)[i] = masked_ranges[i] ^ rmask[i % sizeof(rmask)]; } UInt8 dk[16], div[16]; deriveKeyAndIV(dk, div); NSData *r = filterDataInRange(um, ur[0], dk, div); memset(dk, 0, 16); memset(div, 0, 16); free(ur); return r;',
 				allEncryptedAssetsReturn: 'NSNumber *index = [map objectForKey:@(djb2_hash([path UTF8String]))];'
 					+ '\n  if (index == nil) {\n    return nil;\n  }'
-					+ '\n  NSUInteger dlen2 = sizeof(data); NSMutableData *um2 = [NSMutableData dataWithLength:dlen2]; UInt8 *ob2 = [um2 mutableBytes]; for (NSUInteger i = 0; i < dlen2; i++) { ob2[i] = data[i] ^ xmask[i % sizeof(xmask)]; } return filterDataInRange(um2, ranges[index.integerValue]);'
+					+ '\n  NSUInteger dlen2 = sizeof(data); NSMutableData *um2 = [NSMutableData dataWithLength:dlen2]; UInt8 *ob2 = [um2 mutableBytes]; for (NSUInteger i = 0; i < dlen2; i++) { ob2[i] = data[i] ^ xmask[i % sizeof(xmask)]; } NSUInteger rblen2 = range_count * sizeof(NSRange); NSRange *ur2 = (NSRange *)malloc(rblen2); for (NSUInteger i = 0; i < rblen2; i++) { ((UInt8 *)ur2)[i] = masked_ranges[i] ^ rmask[i % sizeof(rmask)]; } UInt8 dk2[16], div2[16]; deriveKeyAndIV(dk2, div2); NSData *r2 = filterDataInRange(um2, ur2[index.integerValue], dk2, div2); memset(dk2, 0, 16); memset(div2, 0, 16); free(ur2); return r2;'
 			},
 			titaniumPrepHook = this.cli.createHook('build.ios.titaniumprep', this, function (exe, args, opts, done) {
 				const jsFilesToEncrypt = opts.jsFiles,

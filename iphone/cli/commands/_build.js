@@ -27,6 +27,7 @@ import path from 'node:path';
 import { PNG } from 'pngjs';
 import { CopyResourcesTask } from '../../../cli/lib/tasks/copy-resources-task.js';
 import { ProcessJsTask } from '../../../cli/lib/tasks/process-js-task.js';
+import { obfuscateJsFiles } from '../../../cli/lib/tasks/obfuscate-js-task.js';
 import { Color } from '../../../common/lib/color.js';
 import { ProcessCSSTask } from '../../../cli/lib/tasks/process-css-task.js';
 import { injectSPMPackage } from '../lib/ios/spm.js';
@@ -1949,6 +1950,13 @@ class iOSBuilder extends Builder {
 				this.encryptJS = false;
 			}
 
+				const jsObfuscateArg = cli.argv['js-obfuscate'];
+				if (jsObfuscateArg) {
+					this.obfuscateJS = jsObfuscateArg === true ? 'low' : jsObfuscateArg;
+				} else if (cli.tiapp.properties['ti.js.obfuscate'] && cli.tiapp.properties['ti.js.obfuscate'].value) {
+					this.obfuscateJS = cli.tiapp.properties['ti.js.obfuscate'].value === 'true' ? 'low' : cli.tiapp.properties['ti.js.obfuscate'].value;
+				}
+
 			if (cli.argv['skip-js-minify']) {
 				this.minifyJS = false;
 			}
@@ -2732,6 +2740,7 @@ class iOSBuilder extends Builder {
 			// Titanium related tasks
 			this.writeDebugProfilePlists();
 			await this.copyResources();
+				await this.obfuscateJSFiles();
 			await new Promise((resolve, reject) => {
 				this.encryptJSFiles(e => {
 					if (e) {
@@ -6671,6 +6680,27 @@ class iOSBuilder extends Builder {
 			files: resourcesToCopy
 		});
 		return task.run();
+	}
+
+	async obfuscateJSFiles() {
+		if (!this.obfuscateJS) {
+			return;
+		}
+		const sdkCommonFolder = path.join(this.titaniumSdkPath, 'common', 'Resources', 'ios');
+		const baseDir = this.encryptJS ? this.buildAssetsDir : this.xcodeAppDir;
+		const jsFiles = this.encryptJS
+			? this.jsFilesToEncrypt.map(f => f)
+			: Object.keys(this.jsFiles || {}).map(k => k);
+		if (!jsFiles.length) {
+			return;
+		}
+		await obfuscateJsFiles({
+			logger: this.logger,
+			jsFiles,
+			baseDir,
+			sdkCommonFolder,
+			level: this.obfuscateJS
+		});
 	}
 
 	encryptJSFiles(next) {
