@@ -54,6 +54,13 @@ export async function obfuscateJsFiles(options) {
 	const tasks = jsFiles.map(relPath => limit(async () => {
 		const filePath = path.join(baseDir, relPath);
 
+		// Skip non-JS files (JSON, etc.) — the obfuscator can't parse them
+		const ext = path.extname(relPath).toLowerCase();
+		if (ext !== '.js' && ext !== '.cjs' && ext !== '.mjs') {
+			logger.trace(`Skipping non-JS file: ${relPath.cyan}`);
+			return;
+		}
+
 		// Skip SDK common files
 		if (sdkCommonFolder && filePath.startsWith(sdkCommonFolder)) {
 			logger.trace(`Skipping SDK file: ${relPath.cyan}`);

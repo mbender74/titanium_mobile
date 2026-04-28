@@ -5594,6 +5594,7 @@ class iOSBuilder extends Builder {
 			jsFiles[key] = value;
 			inputFiles.push(value.src);
 		}
+		this.jsFiles = jsFiles; // stored for obfuscateJSFiles()
 		const jsBootstrapFiles = []; // modified by the task and then used after the fact to write our bootstrap.json file
 		const task = new ProcessJsTask({
 			inputFiles,
@@ -6687,10 +6688,11 @@ class iOSBuilder extends Builder {
 			return;
 		}
 		const sdkCommonFolder = path.join(this.titaniumSdkPath, 'common', 'Resources', 'ios');
+		// When encrypting, JS files are in buildAssetsDir; otherwise in xcodeAppDir
 		const baseDir = this.encryptJS ? this.buildAssetsDir : this.xcodeAppDir;
 		const jsFiles = this.encryptJS
-			? this.jsFilesToEncrypt.map(f => f)
-			: Object.keys(this.jsFiles || {}).map(k => k);
+			? this.jsFilesToEncrypt.slice()
+			: Object.keys(this.jsFiles || {});
 		if (!jsFiles.length) {
 			return;
 		}

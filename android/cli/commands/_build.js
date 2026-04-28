@@ -2671,6 +2671,7 @@ class AndroidBuilder extends Builder {
 			};
 			inputFiles.push(value.src);
 		}
+		this.jsFiles = jsFiles; // stored for obfuscateJSFiles()
 
 		const jsBootstrapFiles = []; // modified by the task and then used after the fact to write our bootstrap.json file
 		const task = new ProcessJsTask({
@@ -2878,10 +2879,10 @@ class AndroidBuilder extends Builder {
 			return;
 		}
 		const sdkCommonFolder = path.join(this.titaniumSdkPath, 'common', 'Resources', 'android');
-		const baseDir = this.encryptJS ? this.buildAssetsDir : this.buildAppMainAssetsResourcesDir;
+		const baseDir = this.buildAssetsDir;
 		const jsFiles = this.encryptJS
-			? this.jsFilesToEncrypt.map(f => f)
-			: Object.keys(this.jsFiles || {}).map(k => k);
+			? this.jsFilesToEncrypt.slice()
+			: Object.keys(this.jsFiles || {});
 		if (!jsFiles.length) {
 			return;
 		}
