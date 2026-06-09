@@ -9,8 +9,11 @@ package org.appcelerator.titanium.proxy;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.TreeSet;
 
 import org.appcelerator.kroll.KrollDict;
@@ -148,7 +151,18 @@ public abstract class TiViewProxy extends KrollProxy
 		return overrideCurrentAnimation;
 	}
 
-	private static final HashMap<TiUrl, String> styleSheetUrlCache = new HashMap<>(5);
+	// LRU cache with limited size to prevent unbounded growth
+	private static final int STYLE_SHEET_CACHE_SIZE = 20;
+	private static final Map<TiUrl, String> styleSheetUrlCache = Collections.synchronizedMap(
+		new LinkedHashMap<TiUrl, String>(STYLE_SHEET_CACHE_SIZE, 0.75f, true)
+		{
+			@Override
+			protected boolean removeEldestEntry(Map.Entry<TiUrl, String> eldest)
+			{
+				return size() > STYLE_SHEET_CACHE_SIZE;
+			}
+		});
+
 	protected String getBaseUrlForStylesheet()
 	{
 		TiUrl creationUrl = getCreationUrl();

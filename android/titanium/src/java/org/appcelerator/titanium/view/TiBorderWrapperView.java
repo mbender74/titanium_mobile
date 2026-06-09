@@ -42,6 +42,13 @@ public class TiBorderWrapperView extends FrameLayout
 	private Paint paint;
 	private Rect bounds;
 	private ViewOutlineProvider viewOutlineProvider;
+
+	// Pooled objects to avoid per-frame allocations in onDraw()
+	private RectF innerRect = new RectF();
+	private RectF outerRect = new RectF();
+	private Path outerPath = new Path();
+	private Path innerPath = new Path();
+	private float[] innerRadius = new float[8];
 	public TiBorderWrapperView(Context context)
 	{
 		super(context);
@@ -81,23 +88,25 @@ public class TiBorderWrapperView extends FrameLayout
 
 		int maxPadding = (int) Math.min(bounds.right / 2, bounds.bottom / 2);
 		int padding = (int) Math.min(borderWidth, maxPadding);
-		RectF innerRect =
-			new RectF(bounds.left + padding, bounds.top + padding, bounds.right - padding, bounds.bottom - padding);
-		RectF outerRect = new RectF(bounds);
+
+		// Reuse pooled RectF objects
+		innerRect.set(bounds.left + padding, bounds.top + padding, bounds.right - padding, bounds.bottom - padding);
+		outerRect.set(bounds);
 
 		paint.setColor(color);
 		if (alpha > -1) {
 			paint.setAlpha(alpha);
 		}
 
-		Path outerPath = new Path();
+		// Reuse pooled Path objects
+		outerPath.reset();
 		if (hasRadius()) {
-			float[] innerRadius = new float[this.radius.length];
+			// Reuse pooled innerRadius array
 			for (int i = 0; i < this.radius.length; i++) {
 				innerRadius[i] = this.radius[i] - padding;
 			}
 			outerPath.addRoundRect(innerRect, innerRadius, Direction.CCW);
-			Path innerPath = new Path(outerPath);
+			innerPath = new Path(outerPath);
 
 			// Draw border.
 			outerPath.addRoundRect(outerRect, this.radius, Direction.CW);

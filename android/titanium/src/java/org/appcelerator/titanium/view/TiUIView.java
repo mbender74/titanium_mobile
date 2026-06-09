@@ -120,6 +120,12 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	protected KrollDict additionalEventData;
 
+	// Track visual changes to avoid unnecessary invalidate() calls
+	protected boolean visualDirty = false;
+
+	// Gate touch event processing to only activate when listeners exist
+	protected boolean touchListenersActive = false;
+
 	// Since Android doesn't have a property to check to indicate
 	// the current animated x/y scale (from a scale animation), we track it here
 	// so if another scale animation is done we can gleen the fromX and fromY values
@@ -411,10 +417,49 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	public void listenerAdded(String type, int count, KrollProxy proxy)
 	{
+		updateTouchHandling();
 	}
 
 	public void listenerRemoved(String type, int count, KrollProxy proxy)
 	{
+		updateTouchHandling();
+	}
+
+	/**
+	 * Update touch event handling based on whether relevant listeners exist.
+	 * Only activates touch processing when touch/gesture listeners are registered.
+	 */
+	protected void updateTouchHandling()
+	{
+		if (proxy == null) {
+			return;
+		}
+		boolean hasTouchListeners = proxy.hasListeners(TiC.EVENT_TOUCH_START)
+			|| proxy.hasListeners(TiC.EVENT_TOUCH_END)
+			|| proxy.hasListeners(TiC.EVENT_TOUCH_MOVE)
+			|| proxy.hasListeners(TiC.EVENT_TOUCH_CANCEL)
+			|| proxy.hasListeners(TiC.EVENT_PINCH)
+			|| proxy.hasListeners(TiC.EVENT_ROTATE)
+			|| proxy.hasListeners(TiC.EVENT_TWOFINGERTAP)
+			|| proxy.hasListeners(TiC.EVENT_LONGCLICK)
+			|| proxy.hasListeners(TiC.EVENT_LONGPRESS);
+
+		if (hasTouchListeners != touchListenersActive) {
+			touchListenersActive = hasTouchListeners;
+			View touchable = touchView != null ? touchView.get() : null;
+			if (touchable != null) {
+				if (hasTouchListeners) {
+					registerTouchEvents(touchable);
+				} else {
+					unregisterTouchEvents(touchable);
+				}
+			}
+		}
+	}
+
+	protected void unregisterTouchEvents(View touchable)
+	{
+		touchable.setOnTouchListener(null);
 	}
 
 	protected boolean hasImage(KrollDict d)
@@ -517,33 +562,37 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	{
 		final TiViewProxy p = this.proxy;
 		bTransformPending.set(true);
-		OnGlobalLayoutListener layoutListener = new OnGlobalLayoutListener() {
+		final OnGlobalLayoutListener layoutListener = new OnGlobalLayoutListener() {
 			public void onGlobalLayout()
 			{
-				animBuilder.setCallback(new KrollFunction() {
-					public Object call(KrollObject krollObject, HashMap args)
-					{
-						return null;
-					}
-					public Object call(KrollObject krollObject, Object[] args)
-					{
-						return null;
-					}
-					public void callAsync(KrollObject krollObject, HashMap args)
-					{
-					}
-					public void callAsync(KrollObject krollObject, Object[] args)
-					{
-						bTransformPending.set(false);
-						p.handlePendingAnimation(true);
-					}
-				});
-				animBuilder.start(p, v);
 				try {
-					v.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-				} catch (IllegalStateException e) {
-					if (Log.isDebugModeEnabled()) {
-						Log.w(TAG, "Unable to remove the OnGlobalLayoutListener.", e.getMessage());
+					animBuilder.setCallback(new KrollFunction() {
+						public Object call(KrollObject krollObject, HashMap args)
+						{
+							return null;
+						}
+						public Object call(KrollObject krollObject, Object[] args)
+						{
+							return null;
+						}
+						public void callAsync(KrollObject krollObject, HashMap args)
+						{
+						}
+						public void callAsync(KrollObject krollObject, Object[] args)
+						{
+							bTransformPending.set(false);
+							p.handlePendingAnimation(true);
+						}
+					});
+					animBuilder.start(p, v);
+				} finally {
+					// ALWAYS remove listener to prevent leaks (even on IllegalStateException)
+					try {
+						v.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+					} catch (IllegalStateException e) {
+						if (Log.isDebugModeEnabled()) {
+							Log.w(TAG, "Unable to remove the OnGlobalLayoutListener.", e.getMessage());
+						}
 					}
 				}
 			}
@@ -556,15 +605,19 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			@Override
 			public boolean onPreDraw()
 			{
-				if (TiAnimationBuilder.isAnimationRunningFor(v)) {
-					// Skip the current drawing pass.
-					return false;
-				}
 				try {
-					v.getViewTreeObserver().removeOnPreDrawListener(this);
-				} catch (IllegalStateException e) {
-					if (Log.isDebugModeEnabled()) {
-						Log.w(TAG, "Unable to remove the OnPreDrawListener.", e.getMessage());
+					if (TiAnimationBuilder.isAnimationRunningFor(v)) {
+						// Skip the current drawing pass.
+						return false;
+					}
+				} finally {
+					// ALWAYS remove listener to prevent leaks
+					try {
+						v.getViewTreeObserver().removeOnPreDrawListener(this);
+					} catch (IllegalStateException e) {
+						if (Log.isDebugModeEnabled()) {
+							Log.w(TAG, "Unable to remove the OnPreDrawListener.", e.getMessage());
+						}
 					}
 				}
 				return true;
@@ -612,6 +665,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 					public void onGlobalLayout()
 					{
 						bLayoutPending.set(false);
+						// ALWAYS remove listener to prevent leaks (even on IllegalStateException)
 						try {
 							v.getViewTreeObserver().removeOnGlobalLayoutListener(this);
 						} catch (IllegalStateException e) {
@@ -669,6 +723,10 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	public void propertyChanged(String key, Object oldValue, Object newValue, KrollProxy proxy)
 	{
+		// Early exit: skip if value hasn't actually changed
+		if (oldValue != null && oldValue.equals(newValue)) {
+			return;
+		}
 		if (key.equals(TiC.PROPERTY_LEFT)) {
 			resetPostAnimationValues();
 			resetTranslationX();
@@ -888,9 +946,19 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			}
 			if (key.equals(TiC.PROPERTY_OPACITY)) {
 				setOpacity(TiConvert.toFloat(newValue, 1f));
+				visualDirty = true;
 			}
-			if (this.nativeView != null) {
+			// Mark visual dirty for background/border/opacity changes
+			if (key.startsWith(TiC.PROPERTY_BACKGROUND_PREFIX)
+				|| key.startsWith(TiC.PROPERTY_BORDER_PREFIX)
+				|| key.equals(TiC.PROPERTY_OPACITY)
+				|| key.equals(TiC.PROPERTY_ELEVATION)
+				|| key.equals(TiC.PROPERTY_ANCHOR_POINT)) {
+				visualDirty = true;
+			}
+			if (this.nativeView != null && visualDirty) {
 				this.nativeView.postInvalidate();
+				visualDirty = false;
 			}
 		} else if (key.equals(TiC.PROPERTY_SOFT_KEYBOARD_ON_FOCUS)) {
 			Log.w(TAG,
@@ -1388,6 +1456,8 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		}
 		proxy = null;
 		layoutParams = null;
+		visualDirty = false;
+		touchListenersActive = false;
 	}
 
 	private void releaseLongPressMotionEvent()

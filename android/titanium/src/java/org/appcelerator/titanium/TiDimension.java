@@ -6,6 +6,8 @@
  */
 package org.appcelerator.titanium;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -37,6 +39,9 @@ import android.view.WindowManager;
 public class TiDimension
 {
 	private static final String TAG = "TiDimension";
+
+	// Cache parsed TiDimension strings to avoid redundant regex parsing
+	private static final Map<String, TiDimension> stringCache = new ConcurrentHashMap<>(64);
 
 	public static final int COMPLEX_UNIT_UNDEFINED = TypedValue.COMPLEX_UNIT_MASK + 1;
 	public static final int COMPLEX_UNIT_PERCENT = TypedValue.COMPLEX_UNIT_MASK + 2;
@@ -118,6 +123,16 @@ public class TiDimension
 		this.valueType = valueType;
 		this.units = TypedValue.COMPLEX_UNIT_PX;
 		if (svalue != null) {
+			// Check cache first
+			String cacheKey = svalue.trim().toLowerCase() + "|" + valueType;
+			TiDimension cached = stringCache.get(cacheKey);
+			if (cached != null) {
+				// Reuse cached values (TiDimension is effectively immutable after creation)
+				this.value = cached.value;
+				this.units = cached.units;
+				return;
+			}
+
 			Matcher m = DIMENSION_PATTERN.matcher(svalue.trim());
 			if (m.matches()) {
 				value = Float.parseFloat(m.group(1));
@@ -154,6 +169,9 @@ public class TiDimension
 				this.value = Integer.MIN_VALUE;
 				this.units = COMPLEX_UNIT_AUTO;
 			}
+
+			// Cache the parsed result
+			stringCache.put(cacheKey, this);
 		}
 	}
 
