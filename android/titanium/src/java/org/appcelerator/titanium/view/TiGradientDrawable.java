@@ -44,6 +44,13 @@ public class TiGradientDrawable extends ShapeDrawable
 	private boolean isBackFillingEnd;
 	private View view;
 
+	// Shader cache to avoid recreating shaders when dimensions/colors haven't changed
+	private Shader cachedShader;
+	private int cachedShaderWidth;
+	private int cachedShaderHeight;
+	private int cachedColorsHash;
+	private int cachedOffsetsHash;
+
 	@SuppressWarnings("rawtypes")
 	public TiGradientDrawable(View view, KrollDict properties)
 	{
@@ -336,6 +343,15 @@ public class TiGradientDrawable extends ShapeDrawable
 		@Override
 		public Shader resize(int width, int height)
 		{
+			// Check cache first - only create new Shader when dimensions/colors/offsets actually changed
+			int colorsHash = java.util.Arrays.hashCode(colors);
+			int offsetsHash = (offsets != null) ? java.util.Arrays.hashCode(offsets) : 0;
+
+			if (cachedShader != null && cachedShaderWidth == width && cachedShaderHeight == height
+				&& cachedColorsHash == colorsHash && cachedOffsetsHash == offsetsHash) {
+				return cachedShader;
+			}
+
 			// Fetch the gradient's start/end points within the view, in pixels.
 			float startX = startPoint.getX().getAsPixels(view);
 			float startY = startPoint.getY().getAsPixels(view);
@@ -368,6 +384,14 @@ public class TiGradientDrawable extends ShapeDrawable
 					throw new AssertionError("No valid gradient type set.");
 				}
 			}
+
+			// Update cache
+			cachedShader = shader;
+			cachedShaderWidth = width;
+			cachedShaderHeight = height;
+			cachedColorsHash = colorsHash;
+			cachedOffsetsHash = offsetsHash;
+
 			return shader;
 		}
 	}

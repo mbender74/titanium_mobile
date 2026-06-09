@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.appcelerator.kroll.annotations.Kroll;
@@ -88,6 +89,45 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 
 	public static final String PROXY_ID_PREFIX = "proxy$";
 	public static final int INVALID_EVENT_LISTENER_ID = -1;
+
+	// Cache key for hierarchyHasListener results (proxyId + event)
+	private static class HierarchyListenerCacheKey
+	{
+		final String proxyId;
+		final String event;
+
+		HierarchyListenerCacheKey(String proxyId, String event)
+		{
+			this.proxyId = proxyId;
+			this.event = event;
+		}
+
+		@Override
+		public boolean equals(Object o)
+		{
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			HierarchyListenerCacheKey that = (HierarchyListenerCacheKey) o;
+			return proxyId.equals(that.proxyId) && event.equals(that.event);
+		}
+
+		@Override
+		public int hashCode()
+		{
+			int result = proxyId.hashCode();
+			result = 31 * result + event.hashCode();
+			return result;
+		}
+	}
+
+	// Cache for hierarchyHasListener results with TTL (500ms)
+	private static final int LISTENER_CACHE_TTL_MS = 500;
+	private static final ConcurrentHashMap<HierarchyListenerCacheKey, Long> hierarchyListenerCache =
+		new ConcurrentHashMap<>();
+	private static volatile long lastCacheCleanupTime = System.currentTimeMillis();
+
+	// Periodic cleanup interval for the listener cache
+	private static final long CACHE_CLEANUP_INTERVAL_MS = 5000;
 
 	/**
 	 * The default KrollProxy constructor. Equivalent to <code>KrollProxy("")</code>
@@ -1000,6 +1040,9 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 
 	public void onHasListenersChanged(String event, boolean hasListeners)
 	{
+		// Invalidate hierarchy listener cache when listeners change
+		invalidateHierarchyListenerCache();
+
 		Message msg = getMainHandler().obtainMessage(hasListeners ? MSG_LISTENER_ADDED : MSG_LISTENER_REMOVED);
 		msg.obj = event;
 		TiMessenger.getMainMessenger().sendMessage(msg);
@@ -1020,20 +1063,58 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 
 	/**
 	 * Returns true if any view in the hierarchy has the event listener.
+	 * Uses a cache to avoid redundant recursive calls.
 	 */
 	public boolean hierarchyHasListener(String event)
 	{
+		// Periodic cleanup of stale cache entries
+		long now = System.currentTimeMillis();
+		if (now - lastCacheCleanupTime > CACHE_CLEANUP_INTERVAL_MS) {
+			cleanupHierarchyListenerCache();
+			lastCacheCleanupTime = now;
+		}
+
+		// Check cache first
+		HierarchyListenerCacheKey cacheKey = new HierarchyListenerCacheKey(proxyId, event);
+		Long cachedTime = hierarchyListenerCache.get(cacheKey);
+		if (cachedTime != null && (now - cachedTime) < LISTENER_CACHE_TTL_MS) {
+			return true;
+		}
+
 		boolean hasListener = hasListeners(event);
 
 		// Checks whether the parent has the listener or not
 		if (!hasListener) {
 			KrollProxy parentProxy = getParentForBubbling();
 			if (parentProxy != null && bubbleParent) {
-				return parentProxy.hierarchyHasListener(event);
+				hasListener = parentProxy.hierarchyHasListener(event);
 			}
 		}
 
+		// Cache the result
+		if (hasListener) {
+			hierarchyListenerCache.put(cacheKey, now);
+		}
+
 		return hasListener;
+	}
+
+	/**
+	 * Clean up stale entries from the hierarchy listener cache.
+	 */
+	private static void cleanupHierarchyListenerCache()
+	{
+		long now = System.currentTimeMillis();
+		hierarchyListenerCache.entrySet().removeIf(entry -> (now - entry.getValue()) >= LISTENER_CACHE_TTL_MS);
+	}
+
+	/**
+	 * Invalidate the hierarchy listener cache for this proxy's event listeners.
+	 * Called when listeners are added or removed.
+	 */
+	private void invalidateHierarchyListenerCache()
+	{
+		hierarchyListenerCache.entrySet().removeIf(entry -> entry.getKey().proxyId.equals(proxyId));
 	}
 
 	public boolean shouldFireChange(Object oldValue, Object newValue)

@@ -10,6 +10,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.appcelerator.kroll.KrollDict;
@@ -155,6 +156,31 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	protected KrollDict lastUpEvent = new KrollDict(3);
 	private MotionEvent longPressMotionEvent;
 
+	/**
+	 * Borrow a KrollDict from the pool, or create a new one if the pool is empty.
+	 */
+	protected static KrollDict borrowKrollDict()
+	{
+		KrollDict dict = krollDictPool.poll();
+		if (dict == null) {
+			return new KrollDict();
+		}
+		return dict;
+	}
+
+	/**
+	 * Return a KrollDict to the pool after clearing its contents.
+	 */
+	protected static void returnKrollDict(KrollDict dict)
+	{
+		if (dict != null) {
+			dict.clear();
+			if (krollDictPool.size() < MAX_POOL_SIZE) {
+				krollDictPool.offer(dict);
+			}
+		}
+	}
+
 	// In the case of heavy-weight windows, the "nativeView" is null,
 	// so this holds a reference to the view which is used for touching,
 	// i.e., the view passed to registerForTouch.
@@ -169,7 +195,13 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	private int visibility = View.VISIBLE;
 	private int hiddenBehavior = View.INVISIBLE;
 
+	// Gesture detectors as member fields for lazy initialization and proper lifecycle management
 	protected GestureDetector detector = null;
+	private ScaleGestureDetector scaleDetector = null;
+
+	// KrollDict pool to reduce allocations in touch event handlers
+	private static final ConcurrentLinkedQueue<KrollDict> krollDictPool = new ConcurrentLinkedQueue<>();
+	private static final int MAX_POOL_SIZE = 32;
 
 	private final AtomicBoolean bLayoutPending = new AtomicBoolean();
 	private final AtomicBoolean bTransformPending = new AtomicBoolean();
@@ -1460,8 +1492,9 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			children.clear();
 			children = null;
 		}
-		// Clear detector to prevent memory leak
+		// Clear detectors to prevent memory leak
 		detector = null;
+		scaleDetector = null;
 		// Clear touchView WeakReference to prevent memory leak
 		if (touchView != null) {
 			touchView.clear();
@@ -1783,7 +1816,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	{
 		touchView = new WeakReference<>(touchable);
 
-		final ScaleGestureDetector scaleDetector =
+		scaleDetector =
 			new ScaleGestureDetector(touchable.getContext(), new SimpleOnScaleGestureListener() {
 				// protect from divide by zero errors
 				final long minTimeDelta = 1;
@@ -1805,7 +1838,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 					}
 
 					if (didScale) {
-						KrollDict data = new KrollDict();
+						KrollDict data = borrowKrollDict();
 						data.put(TiC.EVENT_PROPERTY_CURRENT_SPAN, sgd.getCurrentSpan());
 						data.put(TiC.EVENT_PROPERTY_CURRENT_SPAN_X, sgd.getCurrentSpanX());
 						data.put(TiC.EVENT_PROPERTY_CURRENT_SPAN_Y, sgd.getCurrentSpanY());
@@ -1821,7 +1854,9 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 						data.put(TiC.EVENT_PROPERTY_VELOCITY, (sgd.getScaleFactor() - 1.0f) / timeDelta * 1000);
 						data.put(TiC.EVENT_PROPERTY_SOURCE, proxy);
 
-						return fireSyncEvent(TiC.EVENT_PINCH, data);
+						boolean result = fireSyncEvent(TiC.EVENT_PINCH, data);
+						returnKrollDict(data);
+						return result;
 					}
 					return false;
 				}
@@ -1900,10 +1935,11 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 					degrees += 360;
 				}
 				if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
-					KrollDict data = new KrollDict();
+					KrollDict data = borrowKrollDict();
 					data.put(TiC.PROPERTY_ROTATE, degrees);
 					data.put(TiC.EVENT_PROPERTY_SOURCE, proxy);
 					fireEvent(TiC.EVENT_ROTATE, data);
+					returnKrollDict(data);
 				}
 			}
 

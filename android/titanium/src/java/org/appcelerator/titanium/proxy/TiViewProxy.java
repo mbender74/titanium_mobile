@@ -289,20 +289,20 @@ public abstract class TiViewProxy extends KrollProxy
 			int[] position = new int[2];
 			v.getLocationInWindow(position);
 
-			TiDimension nativeWidth = new TiDimension(v.getWidth(), TiDimension.TYPE_WIDTH);
-			TiDimension nativeHeight = new TiDimension(v.getHeight(), TiDimension.TYPE_HEIGHT);
-			TiDimension nativeLeft = new TiDimension(position[0], TiDimension.TYPE_LEFT);
-			TiDimension nativeTop = new TiDimension(position[1], TiDimension.TYPE_TOP);
-			TiDimension localLeft = new TiDimension(v.getX(), TiDimension.TYPE_LEFT);
-			TiDimension localTop = new TiDimension(v.getY(), TiDimension.TYPE_TOP);
+			// Return raw pixel values directly instead of creating TiDimension objects
+			double width = (double) v.getWidth();
+			double height = (double) v.getHeight();
+			double xAbsolute = (double) position[0];
+			double yAbsolute = (double) position[1];
+			double xLocal = v.getX();
+			double yLocal = v.getY();
 
-			// TiDimension needs a view to grab the window manager.
-			d.put(TiC.PROPERTY_WIDTH, nativeWidth.getAsDefault(v));
-			d.put(TiC.PROPERTY_HEIGHT, nativeHeight.getAsDefault(v));
-			d.put(TiC.PROPERTY_X, localLeft.getAsDefault(v));
-			d.put(TiC.PROPERTY_Y, localTop.getAsDefault(v));
-			d.put(TiC.PROPERTY_X_ABSOLUTE, nativeLeft.getAsDefault(v));
-			d.put(TiC.PROPERTY_Y_ABSOLUTE, nativeTop.getAsDefault(v));
+			d.put(TiC.PROPERTY_WIDTH, width);
+			d.put(TiC.PROPERTY_HEIGHT, height);
+			d.put(TiC.PROPERTY_X, xLocal);
+			d.put(TiC.PROPERTY_Y, yLocal);
+			d.put(TiC.PROPERTY_X_ABSOLUTE, xAbsolute);
+			d.put(TiC.PROPERTY_Y_ABSOLUTE, yAbsolute);
 		}
 		if (!d.containsKey(TiC.PROPERTY_WIDTH)) {
 			d.put(TiC.PROPERTY_WIDTH, 0);
@@ -322,15 +322,12 @@ public abstract class TiViewProxy extends KrollProxy
 		if (view != null) {
 			View v = view.getNativeView();
 			if (v != null) {
-				TiDimension nativeWidth = new TiDimension(v.getWidth(), TiDimension.TYPE_WIDTH);
-				TiDimension nativeHeight = new TiDimension(v.getHeight(), TiDimension.TYPE_HEIGHT);
+				// Return raw pixel values directly instead of creating TiDimension objects
+				double width = (double) v.getWidth();
+				double height = (double) v.getHeight();
 
-				// TiDimension needs a view to grab the window manager, so we'll just use the decorview of the current window
-				View decorView = TiApplication.getAppRootOrCurrentActivity().getWindow().getDecorView();
-				if (decorView != null) {
-					d.put(TiC.PROPERTY_WIDTH, nativeWidth.getAsDefault(decorView));
-					d.put(TiC.PROPERTY_HEIGHT, nativeHeight.getAsDefault(decorView));
-				}
+				d.put(TiC.PROPERTY_WIDTH, width);
+				d.put(TiC.PROPERTY_HEIGHT, height);
 			}
 		}
 		if (!d.containsKey(TiC.PROPERTY_WIDTH)) {

@@ -103,6 +103,10 @@ public class TiAnimationBuilder
 	private static final ArrayList<WeakReference<View>> sRunningViews = new ArrayList<>();
 	private static final TiAnimationCurve DEFAULT_CURVE = TiAnimationCurve.EASE_IN_OUT;
 
+	// Periodic cleanup tracking for sRunningViews
+	private static volatile long lastRunningViewsCleanupTime = System.currentTimeMillis();
+	private static final long RUNNING_VIEWS_CLEANUP_INTERVAL_MS = 10000;
+
 	protected float anchorX;
 	protected float anchorY;
 	protected float elevation = -1;
@@ -119,6 +123,16 @@ public class TiAnimationBuilder
 	protected Integer color = null;
 	protected float rotationY, rotationX = -1;
 	protected TiAnimationCurve curve = TiAnimationBuilder.DEFAULT_CURVE;
+
+	// Cached TiDimension objects to avoid redundant allocations during animation
+	protected TiDimension cachedTop = null;
+	protected TiDimension cachedBottom = null;
+	protected TiDimension cachedLeft = null;
+	protected TiDimension cachedRight = null;
+	protected TiDimension cachedCenterX = null;
+	protected TiDimension cachedCenterY = null;
+	protected TiDimension cachedWidth = null;
+	protected TiDimension cachedHeight = null;
 
 	protected TiAnimation animationProxy;
 	protected KrollFunction callback;
@@ -197,18 +211,22 @@ public class TiAnimationBuilder
 
 		if (options.containsKey(TiC.PROPERTY_TOP)) {
 			top = TiConvert.toString(options, TiC.PROPERTY_TOP);
+			cachedTop = new TiDimension(top, TiDimension.TYPE_TOP);
 		}
 
 		if (options.containsKey(TiC.PROPERTY_BOTTOM)) {
 			bottom = TiConvert.toString(options, TiC.PROPERTY_BOTTOM);
+			cachedBottom = new TiDimension(bottom, TiDimension.TYPE_BOTTOM);
 		}
 
 		if (options.containsKey(TiC.PROPERTY_LEFT)) {
 			left = TiConvert.toString(options, TiC.PROPERTY_LEFT);
+			cachedLeft = new TiDimension(left, TiDimension.TYPE_LEFT);
 		}
 
 		if (options.containsKey(TiC.PROPERTY_RIGHT)) {
 			right = TiConvert.toString(options, TiC.PROPERTY_RIGHT);
+			cachedRight = new TiDimension(right, TiDimension.TYPE_RIGHT);
 		}
 
 		if (options.containsKey(TiC.PROPERTY_CENTER)) {
@@ -217,6 +235,8 @@ public class TiAnimationBuilder
 				HashMap center = (HashMap) centerPoint;
 				centerX = TiConvert.toString(center, TiC.PROPERTY_X);
 				centerY = TiConvert.toString(center, TiC.PROPERTY_Y);
+				cachedCenterX = new TiDimension(centerX, TiDimension.TYPE_CENTER_X);
+				cachedCenterY = new TiDimension(centerY, TiDimension.TYPE_CENTER_Y);
 
 			} else {
 				Log.e(TAG, "Invalid argument type for center property. Ignoring");
@@ -225,10 +245,12 @@ public class TiAnimationBuilder
 
 		if (options.containsKey(TiC.PROPERTY_WIDTH)) {
 			width = TiConvert.toString(options, TiC.PROPERTY_WIDTH);
+			cachedWidth = new TiDimension(width, TiDimension.TYPE_WIDTH);
 		}
 
 		if (options.containsKey(TiC.PROPERTY_HEIGHT)) {
 			height = TiConvert.toString(options, TiC.PROPERTY_HEIGHT);
+			cachedHeight = new TiDimension(height, TiDimension.TYPE_HEIGHT);
 		}
 
 		if (options.containsKey(TiC.PROPERTY_BACKGROUND_COLOR)) {
@@ -439,7 +461,7 @@ public class TiAnimationBuilder
 			// use the correct TiDimension constructor, except when
 			// we know the values are expressed for certain in pixels.
 			if (top != null) {
-				optionTop = new TiDimension(top, TiDimension.TYPE_TOP);
+				optionTop = cachedTop;
 			} else if (bottom == null && centerY == null) {
 				// Fix a top value since no other y-axis value is being set.
 				optionTop = new TiDimension(view.getTop(), TiDimension.TYPE_TOP);
@@ -447,11 +469,11 @@ public class TiAnimationBuilder
 			}
 
 			if (bottom != null) {
-				optionBottom = new TiDimension(bottom, TiDimension.TYPE_BOTTOM);
+				optionBottom = cachedBottom;
 			}
 
 			if (left != null) {
-				optionLeft = new TiDimension(left, TiDimension.TYPE_LEFT);
+				optionLeft = cachedLeft;
 			} else if (right == null && centerX == null) {
 				// Fix a left value since no other x-axis value is being set.
 				optionLeft = new TiDimension(view.getLeft(), TiDimension.TYPE_LEFT);
@@ -459,15 +481,15 @@ public class TiAnimationBuilder
 			}
 
 			if (right != null) {
-				optionRight = new TiDimension(right, TiDimension.TYPE_RIGHT);
+				optionRight = cachedRight;
 			}
 
 			if (centerX != null) {
-				optionCenterX = new TiDimension(centerX, TiDimension.TYPE_CENTER_X);
+				optionCenterX = cachedCenterX;
 			}
 
 			if (centerY != null) {
-				optionCenterY = new TiDimension(centerY, TiDimension.TYPE_CENTER_Y);
+				optionCenterY = cachedCenterY;
 			}
 
 			int[] horizontal = new int[2];
@@ -482,12 +504,12 @@ public class TiAnimationBuilder
 			}
 
 			if (height != null) {
-				optionHeight = new TiDimension(height, TiDimension.TYPE_HEIGHT);
+				optionHeight = cachedHeight;
 				newHeight = optionHeight.getAsPixels(parentView);
 			}
 
 			if (width != null) {
-				optionWidth = new TiDimension(width, TiDimension.TYPE_WIDTH);
+				optionWidth = cachedWidth;
 				newWidth = optionWidth.getAsPixels(parentView);
 			}
 
@@ -579,14 +601,14 @@ public class TiAnimationBuilder
 			TiDimension optionWidth, optionHeight;
 
 			if (width != null) {
-				optionWidth = new TiDimension(width, TiDimension.TYPE_WIDTH);
+				optionWidth = cachedWidth;
 			} else {
 				optionWidth = new TiDimension(w, TiDimension.TYPE_WIDTH);
 				optionWidth.setUnits(TypedValue.COMPLEX_UNIT_PX);
 			}
 
 			if (height != null) {
-				optionHeight = new TiDimension(height, TiDimension.TYPE_HEIGHT);
+				optionHeight = cachedHeight;
 			} else {
 				optionHeight = new TiDimension(h, TiDimension.TYPE_HEIGHT);
 				optionHeight.setUnits(TypedValue.COMPLEX_UNIT_PX);
@@ -908,6 +930,8 @@ public class TiAnimationBuilder
 		{
 			if (animator instanceof AnimatorSet) {
 				setAnimationRunningFor(view, false);
+				// Clean up any stale entries in sRunningViews
+				cleanupRunningViews();
 				if (autoreverse == null || !autoreverse.booleanValue()) {
 					// Update the underlying properties post-animation if not auto-reversing
 					for (Object key : options.keySet()) {
@@ -1031,6 +1055,16 @@ public class TiAnimationBuilder
 		this.view = view;
 		this.viewProxy = viewProxy;
 
+		// Reset cached TiDimensions for this animation
+		cachedTop = null;
+		cachedBottom = null;
+		cachedLeft = null;
+		cachedRight = null;
+		cachedCenterX = null;
+		cachedCenterY = null;
+		cachedWidth = null;
+		cachedHeight = null;
+
 		if (tdm == null || tdm.canUsePropertyAnimators()) {
 			buildPropertyAnimators().start();
 		}
@@ -1081,6 +1115,13 @@ public class TiAnimationBuilder
 	 */
 	public static boolean isAnimationRunningFor(View v)
 	{
+		// Periodic cleanup of stale entries
+		long now = System.currentTimeMillis();
+		if (now - lastRunningViewsCleanupTime > RUNNING_VIEWS_CLEANUP_INTERVAL_MS) {
+			cleanupRunningViews();
+			lastRunningViewsCleanupTime = now;
+		}
+
 		if (sRunningViews.size() == 0) {
 			return false;
 		}
@@ -1094,6 +1135,14 @@ public class TiAnimationBuilder
 		}
 
 		return false;
+	}
+
+	/**
+	 * Clean up stale entries from sRunningViews (views that have been garbage collected).
+	 */
+	private static void cleanupRunningViews()
+	{
+		sRunningViews.removeIf(ref -> ref.get() == null);
 	}
 
 	/**

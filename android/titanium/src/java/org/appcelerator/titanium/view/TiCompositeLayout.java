@@ -1149,6 +1149,12 @@ public class TiCompositeLayout extends ViewGroup implements OnHierarchyChangeLis
 		protected boolean cachedWidthPaddingValid = false;
 		protected boolean cachedHeightPaddingValid = false;
 
+		// Cached pixel values for width/height to avoid redundant TiDimension.getAsPixels() calls
+		protected int cachedWidthPixels = -1;
+		protected int cachedHeightPixels = -1;
+		protected boolean cachedWidthPixelsValid = false;
+		protected boolean cachedHeightPixelsValid = false;
+
 		/**
 		 * If this is true, and {@link #sizeOrFillWidthEnabled} is true, then
 		 * the current view will follow the fill behavior, which fills available
@@ -1238,6 +1244,47 @@ public class TiCompositeLayout extends ViewGroup implements OnHierarchyChangeLis
 				pinCount++;
 			}
 			return (pinCount < 2);
+		}
+
+		/**
+		 * Get the width in pixels, using cached value if available.
+		 */
+		public int getWidthPixels(View view)
+		{
+			if (cachedWidthPixelsValid) {
+				return cachedWidthPixels;
+			}
+			if (optionWidth != null) {
+				cachedWidthPixels = optionWidth.getAsPixels(view);
+				cachedWidthPixelsValid = true;
+				return cachedWidthPixels;
+			}
+			return 0;
+		}
+
+		/**
+		 * Get the height in pixels, using cached value if available.
+		 */
+		public int getHeightPixels(View view)
+		{
+			if (cachedHeightPixelsValid) {
+				return cachedHeightPixels;
+			}
+			if (optionHeight != null) {
+				cachedHeightPixels = optionHeight.getAsPixels(view);
+				cachedHeightPixelsValid = true;
+				return cachedHeightPixels;
+			}
+			return 0;
+		}
+
+		/**
+		 * Invalidate the cached pixel values.
+		 */
+		public void invalidatePixelCache()
+		{
+			cachedWidthPixelsValid = false;
+			cachedHeightPixelsValid = false;
 		}
 	}
 
