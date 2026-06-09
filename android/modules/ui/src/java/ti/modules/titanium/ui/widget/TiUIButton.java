@@ -48,6 +48,8 @@ public class TiUIButton extends TiUIView
 	private float shadowX = 0f;
 	private float shadowY = 0f;
 	private int shadowColor = Color.TRANSPARENT;
+	private Drawable cachedButtonDrawable;
+	private String lastImageUrl;
 
 	public TiUIButton(final TiViewProxy proxy)
 	{
@@ -320,12 +322,23 @@ public class TiUIButton extends TiUIView
 			return;
 		}
 
+		// Fetch the image URL to check for caching.
+		Object imageObject = this.proxy.getProperty(TiC.PROPERTY_IMAGE);
+		String currentImageUrl = imageObject != null ? imageObject.toString() : null;
+		if (imageObject != null && currentImageUrl != null && currentImageUrl.equals(this.lastImageUrl)) {
+			// Skip redundant drawable load if image URL unchanged.
+			return;
+		}
+
 		// Fetch the image.
 		Drawable drawable = null;
-		Object imageObject = this.proxy.getProperty(TiC.PROPERTY_IMAGE);
 		if (imageObject != null) {
 			drawable = TiUIHelper.getResourceDrawable(imageObject);
 		}
+
+		// Cache the drawable and image URL for future skip-checks.
+		this.cachedButtonDrawable = drawable;
+		this.lastImageUrl = currentImageUrl;
 
 		// Update button's image/icon.
 		if (drawable != null) {

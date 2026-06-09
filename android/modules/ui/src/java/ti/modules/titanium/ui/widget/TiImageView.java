@@ -53,6 +53,7 @@ public class TiImageView extends ViewGroup
 	private int scalingMode = MediaModule.IMAGE_SCALING_AUTO;
 	private final Matrix baseMatrix = new Matrix();
 	private TiImageView.ZoomHandler zoomHandler;
+	private Bitmap cachedBitmap;
 
 	// Flags to help determine whether width/height is defined, so we can scale appropriately
 	private boolean viewWidthDefined;
@@ -177,11 +178,20 @@ public class TiImageView extends ViewGroup
 	 */
 	public void setImageBitmap(Bitmap bitmap)
 	{
+		// Skip if the same bitmap is already set.
+		if (this.cachedBitmap == bitmap) {
+			return;
+		}
+
 		// Remove image from view if given null.
 		if (bitmap == null) {
 			this.imageView.setImageDrawable(null);
+			this.cachedBitmap = null;
 			return;
 		}
+
+		// Cache the bitmap for future skip-checks.
+		this.cachedBitmap = bitmap;
 
 		// Apply the image to the view.
 		if (this.isImageRippleEnabled) {
@@ -595,7 +605,7 @@ public class TiImageView extends ViewGroup
 					// Update current scale
 					currentScale = newScale;
 
-					tiImageView.requestLayout();
+					tiImageView.invalidate();
 				}
 			});
 			scaleAnimator.start();
@@ -744,13 +754,13 @@ public class TiImageView extends ViewGroup
 
 				// Update the current scale
 				currentScale = scale;
-				tiImageView.requestLayout();
+				tiImageView.invalidate();
 				return true;
 			} else {
 				// Update the matrix if there's actual movement
 				if (newTransX != currentTransX || newTransY != currentTransY) {
 					matrix.postTranslate(newTransX - currentTransX, newTransY - currentTransY);
-					tiImageView.requestLayout();
+					tiImageView.invalidate();
 					return true;
 				}
 			}

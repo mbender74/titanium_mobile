@@ -40,6 +40,9 @@ public class TiUIActivityIndicator extends TiUIView
 	private MaterialTextView label;
 	private CircularProgressIndicator progress;
 	private final int defaultTextColor;
+	private ContextThemeWrapper cachedThemeWrapper;
+	private int cachedThemeId = -1;
+	private TypedArray cachedTypedArray;
 
 	public TiUIActivityIndicator(TiViewProxy proxy)
 	{
@@ -160,13 +163,23 @@ public class TiUIActivityIndicator extends TiUIView
 		if ((styleId == BIG) || (styleId == BIG_DARK)) {
 			themeId = R.style.Widget_MaterialComponents_CircularProgressIndicator_Medium;
 		}
-		ContextThemeWrapper context = new ContextThemeWrapper(this.progress.getContext(), themeId);
-		TypedArray typedArray = context.obtainStyledAttributes(null, idArray, 0, 0);
-		int value = typedArray.getDimensionPixelSize(0, this.progress.getTrackThickness());
+
+		// Cache ContextThemeWrapper and TypedArray if theme hasn't changed.
+		if (this.cachedThemeId != themeId) {
+			// Recycle previous cached TypedArray if present.
+			if (this.cachedTypedArray != null) {
+				this.cachedTypedArray.recycle();
+				this.cachedTypedArray = null;
+			}
+			this.cachedThemeWrapper = new ContextThemeWrapper(this.progress.getContext(), themeId);
+			this.cachedTypedArray = this.cachedThemeWrapper.obtainStyledAttributes(null, idArray, 0, 0);
+			this.cachedThemeId = themeId;
+		}
+
+		TypedArray typedArray = this.cachedTypedArray;
 		this.progress.setTrackThickness(typedArray.getDimensionPixelSize(0, this.progress.getTrackThickness()));
 		this.progress.setIndicatorSize(typedArray.getDimensionPixelSize(1, this.progress.getIndicatorSize()));
 		this.progress.setIndicatorInset(typedArray.getDimensionPixelSize(2, this.progress.getIndicatorInset()));
-		typedArray.recycle();
 
 		// Update indicator's color.
 		if (this.proxy.hasPropertyAndNotNull(TiC.PROPERTY_INDICATOR_COLOR)) {

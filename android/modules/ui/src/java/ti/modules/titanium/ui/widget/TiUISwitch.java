@@ -33,14 +33,21 @@ import ti.modules.titanium.ui.UIModule;
 public class TiUISwitch extends TiUIView implements OnCheckedChangeListener
 {
 	private static final String TAG = "TiUISwitch";
+	private static final int TAG_THUMB_COLOR_CACHE = 0x7f0a0001;
+	private static final int TAG_TINT_COLOR_CACHE = 0x7f0a0002;
 
 	private final View.OnLayoutChangeListener layoutListener;
 	private boolean oldValue = false;
+	private int cachedThumbColor = -1;
+	private int cachedTintColor = -1;
 
 	public TiUISwitch(TiViewProxy proxy)
 	{
 		super(proxy);
 		Log.d(TAG, "Creating a switch", Log.DEBUG_MODE);
+
+		this.cachedThumbColor = -1;
+		this.cachedTintColor = -1;
 
 		this.layoutListener = new View.OnLayoutChangeListener()
 		{
@@ -76,6 +83,11 @@ public class TiUISwitch extends TiUIView implements OnCheckedChangeListener
 					? TiConvert.toColor(d, TiC.PROPERTY_THUMB_COLOR)
 					: TiConvert.toColor(d, TiC.PROPERTY_ON_THUMB_COLOR);
 
+				// Skip if both colors are unchanged.
+				if (colActive == this.cachedThumbColor && colNormal == this.cachedTintColor) {
+					return;
+				}
+
 				ColorStateList trackStates = new ColorStateList(
 					new int[][] {
 						new int[] { -android.R.attr.state_enabled },
@@ -89,6 +101,9 @@ public class TiUISwitch extends TiUIView implements OnCheckedChangeListener
 					}
 				);
 				((SwitchMaterial) currentButton).setThumbTintList(trackStates);
+
+				this.cachedThumbColor = colActive;
+				this.cachedTintColor = colNormal;
 			}
 		}
 
@@ -104,6 +119,11 @@ public class TiUISwitch extends TiUIView implements OnCheckedChangeListener
 					? TiConvert.toColor(d, TiC.PROPERTY_TINT_COLOR)
 					: TiConvert.toColor(d, TiC.PROPERTY_ON_TINT_COLOR);
 
+				// Skip if both colors are unchanged.
+				if (colActive == this.cachedThumbColor && colNormal == this.cachedTintColor) {
+					return;
+				}
+
 				ColorStateList trackStates = new ColorStateList(
 					new int[][] {
 						new int[] { -android.R.attr.state_enabled },
@@ -117,6 +137,9 @@ public class TiUISwitch extends TiUIView implements OnCheckedChangeListener
 					}
 				);
 				((SwitchMaterial) currentButton).setTrackTintList(trackStates);
+
+				this.cachedThumbColor = colActive;
+				this.cachedTintColor = colNormal;
 			}
 		}
 
@@ -169,6 +192,46 @@ public class TiUISwitch extends TiUIView implements OnCheckedChangeListener
 			TiUIHelper.setAlignment(cb, null, verticalAlign);
 		}
 		cb.invalidate();
+	}
+
+	private ColorStateList getColorStateList(int color)
+	{
+		// Return cached ColorStateList if the same color was already created.
+		if (this.cachedThumbColor == color) {
+			return (ColorStateList) getThumbColorStateList();
+		}
+		if (this.cachedTintColor == color) {
+			return (ColorStateList) getTintColorStateList();
+		}
+		ColorStateList stateList = ColorStateList.valueOf(color);
+		if (this.cachedThumbColor == -1) {
+			this.cachedThumbColor = color;
+			setThumbColorStateList(stateList);
+		} else if (this.cachedTintColor == -1) {
+			this.cachedTintColor = color;
+			setTintColorStateList(stateList);
+		}
+		return stateList;
+	}
+
+	private ColorStateList getThumbColorStateList()
+	{
+		return (ColorStateList) getNativeView().getTag(TAG_THUMB_COLOR_CACHE);
+	}
+
+	private void setThumbColorStateList(ColorStateList list)
+	{
+		getNativeView().setTag(TAG_THUMB_COLOR_CACHE, list);
+	}
+
+	private ColorStateList getTintColorStateList()
+	{
+		return (ColorStateList) getNativeView().getTag(TAG_TINT_COLOR_CACHE);
+	}
+
+	private void setTintColorStateList(ColorStateList list)
+	{
+		getNativeView().setTag(TAG_TINT_COLOR_CACHE, list);
 	}
 
 	@Override

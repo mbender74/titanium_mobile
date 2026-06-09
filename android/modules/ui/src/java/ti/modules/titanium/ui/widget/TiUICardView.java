@@ -26,11 +26,14 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.shape.CornerFamily;
+import com.google.android.material.shape.ShapeAppearanceModel;
 
 public class TiUICardView extends TiUIView
 {
 	private ColorStateList defaultRippleColorSateList;
 	private int paddingLeft, paddingTop, paddingRight, paddingBottom;
+	private ShapeAppearanceModel cachedShapeModel;
+	private float[] lastBorderRadius;
 
 	private static final String TAG = "TiUICardView";
 
@@ -437,14 +440,8 @@ public class TiUICardView extends TiUIView
 			}
 
 			if (cornerPixels.length >= 4) {
-				cardView.setShapeAppearanceModel(
-					cardView.getShapeAppearanceModel()
-						.toBuilder()
-						.setTopLeftCorner(CornerFamily.ROUNDED, cornerPixels[0])
-						.setTopRightCorner(CornerFamily.ROUNDED, cornerPixels[1])
-						.setBottomRightCorner(CornerFamily.ROUNDED, cornerPixels[2])
-						.setBottomLeftCorner(CornerFamily.ROUNDED, cornerPixels[3])
-						.build());
+				ShapeAppearanceModel model = getOrCreateShapeModel(cornerPixels);
+				cardView.setShapeAppearanceModel(model);
 			} else {
 				Log.w(TAG, "Could not set borderRadius, empty array.");
 			}
@@ -464,6 +461,44 @@ public class TiUICardView extends TiUIView
 				radius = (float) radiusDim.getPixels(cardView);
 			}
 			cardView.setRadius(radius);
+			// Invalidate cached ShapeAppearanceModel for uniform radius.
+			this.cachedShapeModel = null;
+			this.lastBorderRadius = null;
 		}
+	}
+
+	/**
+	 * Returns a cached ShapeAppearanceModel for the given corner radii, or creates and caches a new one.
+	 */
+	private ShapeAppearanceModel getOrCreateShapeModel(float[] radius)
+	{
+		// Check if we have a cached model with the same radii.
+		if (this.cachedShapeModel != null && this.lastBorderRadius != null
+			&& this.lastBorderRadius.length == radius.length) {
+			boolean same = true;
+			for (int i = 0; i < radius.length; i++) {
+				if (this.lastBorderRadius[i] != radius[i]) {
+					same = false;
+					break;
+				}
+			}
+			if (same) {
+				return this.cachedShapeModel;
+			}
+		}
+
+		TiCardView cardView = (TiCardView) getNativeView();
+		ShapeAppearanceModel model = cardView.getShapeAppearanceModel()
+			.toBuilder()
+			.setTopLeftCorner(CornerFamily.ROUNDED, radius[0])
+			.setTopRightCorner(CornerFamily.ROUNDED, radius[1])
+			.setBottomRightCorner(CornerFamily.ROUNDED, radius[2])
+			.setBottomLeftCorner(CornerFamily.ROUNDED, radius[3])
+			.build();
+
+		// Cache the result.
+		this.cachedShapeModel = model;
+		this.lastBorderRadius = radius.clone();
+		return model;
 	}
 }
