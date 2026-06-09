@@ -415,8 +415,13 @@ public class TiCompositeLayout extends ViewGroup implements OnHierarchyChangeLis
 			relativeWidth = this.childRelativeSizingWidth;
 		}
 
-		// Calculate the given view's left/right padding size in pixels.
+		// Check cache first
 		LayoutParams p = (LayoutParams) child.getLayoutParams();
+		if (p.cachedWidthPaddingValid && p.cachedWidthPaddingParent == relativeWidth) {
+			return (int) p.cachedWidthPadding;
+		}
+
+		// Calculate the given view's left/right padding size in pixels.
 		int padding = 0;
 		if (p.optionLeft != null) {
 			if (p.optionLeft.isUnitPercent()) {
@@ -432,6 +437,11 @@ public class TiCompositeLayout extends ViewGroup implements OnHierarchyChangeLis
 				padding += p.optionRight.getAsPixels(this);
 			}
 		}
+
+		// Cache the result
+		p.cachedWidthPadding = padding;
+		p.cachedWidthPaddingParent = relativeWidth;
+		p.cachedWidthPaddingValid = true;
 		return padding;
 	}
 
@@ -445,8 +455,13 @@ public class TiCompositeLayout extends ViewGroup implements OnHierarchyChangeLis
 			relativeHeight = this.childRelativeSizingHeight;
 		}
 
-		// Calculate the given view's top/bottom padding size in pixels.
+		// Check cache first
 		LayoutParams p = (LayoutParams) child.getLayoutParams();
+		if (p.cachedHeightPaddingValid && p.cachedHeightPaddingParent == relativeHeight) {
+			return (int) p.cachedHeightPadding;
+		}
+
+		// Calculate the given view's top/bottom padding size in pixels.
 		int padding = 0;
 		if (p.optionTop != null) {
 			if (p.optionTop.isUnitPercent()) {
@@ -462,6 +477,11 @@ public class TiCompositeLayout extends ViewGroup implements OnHierarchyChangeLis
 				padding += p.optionBottom.getAsPixels(this);
 			}
 		}
+
+		// Cache the result
+		p.cachedHeightPadding = padding;
+		p.cachedHeightPaddingParent = relativeHeight;
+		p.cachedHeightPaddingValid = true;
 		return padding;
 	}
 
@@ -919,7 +939,9 @@ public class TiCompositeLayout extends ViewGroup implements OnHierarchyChangeLis
 				// If the old child measurements do not match the new
 				// measurements that we calculated, then update the
 				// child measurements accordingly
-				if (newWidth != child.getMeasuredWidth() || newHeight != child.getMeasuredHeight()) {
+				// Only re-measure if dimensions actually changed AND we're using pin-based sizing
+				if ((newWidth != child.getMeasuredWidth() || newHeight != child.getMeasuredHeight())
+					&& !params.sizeOrFillWidthEnabled && !params.sizeOrFillHeightEnabled) {
 					int newWidthSpec = MeasureSpec.makeMeasureSpec(newWidth, MeasureSpec.EXACTLY);
 					int newHeightSpec = MeasureSpec.makeMeasureSpec(newHeight, MeasureSpec.EXACTLY);
 					child.measure(newWidthSpec, newHeightSpec);
@@ -1118,6 +1140,14 @@ public class TiCompositeLayout extends ViewGroup implements OnHierarchyChangeLis
 		// behavior
 		public boolean sizeOrFillHeightEnabled = true;
 		public boolean sizeOrFillWidthEnabled = true;
+
+		// Cached padding values to avoid redundant calculations
+		protected float cachedWidthPadding = 0;
+		protected float cachedHeightPadding = 0;
+		protected int cachedWidthPaddingParent = -1;
+		protected int cachedHeightPaddingParent = -1;
+		protected boolean cachedWidthPaddingValid = false;
+		protected boolean cachedHeightPaddingValid = false;
 
 		/**
 		 * If this is true, and {@link #sizeOrFillWidthEnabled} is true, then

@@ -70,6 +70,7 @@ import android.view.ViewParent;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.ViewTreeObserver.OnPreDrawListener;
 import android.view.animation.Animation;
+import android.view.Choreographer;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 
@@ -125,6 +126,18 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	// Gate touch event processing to only activate when listeners exist
 	protected boolean touchListenersActive = false;
+
+	// Layout batching with Choreographer to avoid redundant layout passes
+	private int layoutDirtyFlags = 0;
+	private static final int DIRTY_LEFT = 0x01;
+	private static final int DIRTY_TOP = 0x02;
+	private static final int DIRTY_RIGHT = 0x04;
+	private static final int DIRTY_BOTTOM = 0x08;
+	private static final int DIRTY_CENTER = 0x10;
+	private static final int DIRTY_SIZE = 0x20;
+	private static final int DIRTY_LAYOUT = 0x40;
+	private static final int DIRTY_HORIZONTAL_WRAP = 0x80;
+	private Choreographer.FrameCallback layoutBatchCallback;
 
 	// Since Android doesn't have a property to check to indicate
 	// the current animated x/y scale (from a scale animation), we track it here
@@ -735,7 +748,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			} else {
 				layoutParams.optionLeft = null;
 			}
-			layoutNativeView();
+			markLayoutDirty(DIRTY_LEFT);
 		} else if (key.equals(TiC.PROPERTY_TOP)) {
 			resetPostAnimationValues();
 			resetTranslationY();
@@ -744,13 +757,13 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			} else {
 				layoutParams.optionTop = null;
 			}
-			layoutNativeView();
+			markLayoutDirty(DIRTY_TOP);
 		} else if (key.equals(TiC.PROPERTY_CENTER)) {
 			resetPostAnimationValues();
 			resetTranslationX();
 			resetTranslationY();
 			TiConvert.updateLayoutCenter(newValue, layoutParams);
-			layoutNativeView();
+			markLayoutDirty(DIRTY_CENTER);
 		} else if (key.equals(TiC.PROPERTY_RIGHT)) {
 			resetPostAnimationValues();
 			resetTranslationX();
@@ -760,7 +773,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			} else {
 				layoutParams.optionRight = null;
 			}
-			layoutNativeView();
+			markLayoutDirty(DIRTY_RIGHT);
 		} else if (key.equals(TiC.PROPERTY_BOTTOM)) {
 			resetPostAnimationValues();
 			resetTranslationY();
@@ -770,7 +783,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			} else {
 				layoutParams.optionBottom = null;
 			}
-			layoutNativeView();
+			markLayoutDirty(DIRTY_BOTTOM);
 		} else if (key.equals(TiC.PROPERTY_SIZE)) {
 			if (newValue instanceof HashMap) {
 				@SuppressWarnings("unchecked")
@@ -798,12 +811,12 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			} else {
 				layoutParams.optionHeight = null;
 			}
-			layoutNativeView();
+			markLayoutDirty(DIRTY_SIZE);
 		} else if (key.equals(TiC.PROPERTY_HORIZONTAL_WRAP)) {
 			if (nativeView instanceof TiCompositeLayout) {
 				((TiCompositeLayout) nativeView).setEnableHorizontalWrap(TiConvert.toBoolean(newValue, true));
 			}
-			layoutNativeView();
+			markLayoutDirty(DIRTY_HORIZONTAL_WRAP);
 		} else if (key.equals(TiC.PROPERTY_WIDTH)) {
 			resetPostAnimationValues();
 			if (newValue != null) {
@@ -821,13 +834,13 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			} else {
 				layoutParams.optionWidth = null;
 			}
-			layoutNativeView();
+			markLayoutDirty(DIRTY_SIZE);
 		} else if (key.equals(TiC.PROPERTY_LAYOUT)) {
 			String layout = TiConvert.toString(newValue);
 			if (nativeView instanceof TiCompositeLayout) {
 				resetPostAnimationValues();
 				((TiCompositeLayout) nativeView).setLayoutArrangement(layout);
-				layoutNativeView();
+				markLayoutDirty(DIRTY_LAYOUT);
 			}
 		} else if (key.equals(TiC.PROPERTY_ZINDEX)) {
 			if (newValue != null) {
@@ -835,7 +848,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			} else {
 				layoutParams.optionZIndex = 0;
 			}
-			layoutNativeView(true);
+			markLayoutDirty(DIRTY_LEFT); // zIndex affects layout ordering
 		} else if (key.equals(TiC.PROPERTY_FOCUSABLE) && newValue != null) {
 			registerForKeyPress(nativeView, TiConvert.toBoolean(newValue, false));
 		} else if (key.equals(TiC.PROPERTY_TOUCH_ENABLED)) {
@@ -1458,6 +1471,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		layoutParams = null;
 		visualDirty = false;
 		touchListenersActive = false;
+		layoutDirtyFlags = 0;
 	}
 
 	private void releaseLongPressMotionEvent()
@@ -2464,6 +2478,28 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			return null;
 		}
 		return composeContentDescription(proxy.getProperties());
+	}
+
+	/**
+	 * Mark layout properties as dirty and schedule a batched layout pass via Choreographer.
+	 * This eliminates redundant layout passes when multiple layout properties change in quick succession.
+	 */
+	protected void markLayoutDirty(int flags)
+	{
+		layoutDirtyFlags |= flags;
+		if (layoutBatchCallback == null) {
+			layoutBatchCallback = new Choreographer.FrameCallback() {
+				@Override
+				public void doFrame(long frameTimeNanos)
+				{
+					if (layoutDirtyFlags != 0) {
+						layoutNativeView();
+						layoutDirtyFlags = 0;
+					}
+				}
+			};
+		}
+		Choreographer.getInstance().postFrameCallback(layoutBatchCallback);
 	}
 
 	public void removeAccessibilityLongClick()
