@@ -7,6 +7,8 @@
 package ti.modules.titanium.ui.widget;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.kroll.KrollProxy;
@@ -67,6 +69,20 @@ public class TiUILabel extends TiUIView
 	private boolean isInvalidationAndLayoutsEnabled = true;
 	private float oldFontSize = -1.0f;
 	private int textFilter = TEXT_FILTER_DEFAULT;
+
+	// Text measurement cache to avoid redundant measureText() calls
+	// Key format: "text|fontSize|ellipsize|maxLines|textFilter"
+	private static final int TEXT_MEASUREMENT_CACHE_SIZE = 100;
+	private Map<String, Float> textWidthCache = new LinkedHashMap<String, Float>(
+		TEXT_MEASUREMENT_CACHE_SIZE, 0.75f, true)
+	{
+		@Override
+		protected boolean removeEldestEntry(Map.Entry<String, Float> eldest)
+		{
+			return size() > TEXT_MEASUREMENT_CACHE_SIZE;
+		}
+	};
+	private float lastCachedFontSize = -1.0f;
 
 	public TiUILabel(final TiViewProxy proxy)
 	{
@@ -299,7 +315,16 @@ public class TiUILabel extends TiUIView
 			}
 
 			// Calculate the width of the view's current text in pixels.
-			float textWidth = textPaint.measureText(text);
+			// Use cached measurement if possible
+			String cacheKey = text + "|" + currentFontSize + "|" + ellipsize + "|" + maxLines + "|" + textFilter;
+			Float cachedWidth = textWidthCache.get(cacheKey);
+			float textWidth;
+			if (cachedWidth != null && Math.abs(cachedWidth - currentFontSize) < FONT_SIZE_EPSILON) {
+				textWidth = cachedWidth;
+			} else {
+				textWidth = textPaint.measureText(text);
+				textWidthCache.put(cacheKey, textWidth);
+			}
 
 			// Do not continue if the text fits within the view's bounds. (Don't need to downscale.)
 			if (textWidth <= viewContentWidth) {
@@ -530,6 +555,7 @@ public class TiUILabel extends TiUIView
 			if ((newText != null) && !newText.equals(this.originalText)) {
 				this.originalText = newText;
 				updateLabelText();
+				clearTextMeasurementCache(); // Text changed, invalidate cache
 				tv.requestLayout();
 			}
 		} else if (key.equals(TiC.PROPERTY_INCLUDE_FONT_PADDING)) {
@@ -577,9 +603,11 @@ public class TiUILabel extends TiUIView
 				}
 			}
 			updateLabelText();
+			clearTextMeasurementCache(); // Ellipsize changed, invalidate cache
 		} else if (key.equals(TiC.PROPERTY_AUTO_LINK)) {
 			this.autoLinkFlags = TiConvert.toInt(newValue, 0) & Linkify.ALL;
 			updateLabelText();
+			clearTextMeasurementCache(); // Auto-link changed, invalidate cache
 		} else if (key.equals(TiC.PROPERTY_SHADOW_OFFSET)) {
 			if (newValue instanceof HashMap) {
 				HashMap dict = (HashMap) newValue;
@@ -604,6 +632,7 @@ public class TiUILabel extends TiUIView
 			if (value != this.maxLines) {
 				this.maxLines = value;
 				updateLabelText();
+				clearTextMeasurementCache(); // Max lines changed, invalidate cache
 			}
 		} else if (key.equals(TiC.PROPERTY_LINE_SPACING)) {
 			if (newValue instanceof HashMap) {
@@ -655,6 +684,7 @@ public class TiUILabel extends TiUIView
 				textFilter = TEXT_FILTER_DEFAULT;
 			}
 			updateLabelText();
+			clearTextMeasurementCache(); // Text filter changed, invalidate cache
 		} else {
 			super.propertyChanged(key, oldValue, newValue, proxy);
 		}
@@ -838,6 +868,15 @@ public class TiUILabel extends TiUIView
 		// Update the view's text.
 		textView.setText(text, MaterialTextView.BufferType.NORMAL);
 		textView.requestLayout();
+	}
+
+	/**
+	 * Clear the text measurement cache when properties that affect text layout change.
+	 */
+	private void clearTextMeasurementCache()
+	{
+		textWidthCache.clear();
+		lastCachedFontSize = -1.0f;
 	}
 
 	public int getLineCount()
