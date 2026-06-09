@@ -729,11 +729,16 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	public void resort()
 	{
+		if (!zIndexChanged) {
+			return; // Nothing changed, skip sort
+		}
 		View v = getNativeView();
 		if (v instanceof TiCompositeLayout) {
 			((TiCompositeLayout) v).resort();
 		}
+		zIndexChanged = false; // Reset dirty flag
 	}
+
 	public boolean iszIndexChanged()
 	{
 		return zIndexChanged;
@@ -2329,10 +2334,25 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	protected void disableHWAcceleration()
 	{
-		if (this.borderView != null && !(proxy.hasProperty("keepHardwareMode")
-			&& TiConvert.toBoolean(proxy.getProperty("keepHardwareMode"), false))
-		) {
-			this.borderView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+		if (this.borderView == null) {
+			return;
+		}
+
+		// Check if hardware acceleration should be kept
+		if (proxy.hasProperty("keepHardwareMode")
+			&& TiConvert.toBoolean(proxy.getProperty("keepHardwareMode"), false)) {
+			// Explicitly enable hardware mode
+			this.borderView.setLayerType(View.LAYER_TYPE_NONE, null);
+			return;
+		}
+
+		// Check if border has alpha < 255 (semi-transparent)
+		// Only disable HW acceleration when actually needed
+		if (background != null) {
+			Integer bgColor = background.getAlpha();
+			if (bgColor != null && android.graphics.Color.alpha(bgColor) < 255) {
+				this.borderView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+			}
 		}
 	}
 
