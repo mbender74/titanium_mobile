@@ -41,6 +41,7 @@ public class TiDimension
 	private static final String TAG = "TiDimension";
 
 	// Cache parsed TiDimension strings to avoid redundant regex parsing
+	private static final int STRING_CACHE_MAX_SIZE = 256;
 	private static final Map<String, TiDimension> stringCache = new ConcurrentHashMap<>(64);
 
 	public static final int COMPLEX_UNIT_UNDEFINED = TypedValue.COMPLEX_UNIT_MASK + 1;
@@ -170,8 +171,10 @@ public class TiDimension
 				this.units = COMPLEX_UNIT_AUTO;
 			}
 
-			// Cache the parsed result
-			stringCache.put(cacheKey, this);
+			// Cache the parsed result (with size limit to prevent unbounded growth)
+			if (stringCache.size() < STRING_CACHE_MAX_SIZE) {
+				stringCache.put(cacheKey, this);
+			}
 		}
 	}
 

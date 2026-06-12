@@ -19,7 +19,7 @@ Analysis of `TiUIView` (2414 lines), `TiViewProxy` (1274 lines), `TiCompositeLay
 | **C. Rendering & Drawing** | 5 | High – 60-70% fewer allocations/frame |
 | **D. Touch & Gestures** | 3 | Medium – ~90% less GC during pinch/rotate |
 | **E. Memory & Lifecycle** | 4 | Medium – fewer memory leaks, cleaner cleanup |
-| **F. TiDimension Allocations** | 3 | High – 80-90% fewer layout allocations |
+| **F. TiDimension Allocations** | 3 | High – 80-90% fewer layout allocations + bounded cache |
 | **G. Widget-Specific** | 5 | Medium – text, image, card rendering |
 | **H. Null-Safety Hardening** | 14 | High – eliminates NPE crashes in production |
 
@@ -39,7 +39,7 @@ Analysis of `TiUIView` (2414 lines), `TiViewProxy` (1274 lines), `TiCompositeLay
 | A2: Equality Checks in propertyChanged | ✅ | TiUIView.java |
 | A3: Z-Index Sort Dirty Flag | ✅ | TiUIView.java |
 | A4: TiCompositeLayout Padding Cache + Double-Measure Fix | ✅ | TiCompositeLayout.java |
-| B1: Property Handler Dispatch Map | 🔲 | TiUIView.java |
+| B1: Property Handler Dispatch Map | ✅ | TiUIView.java |
 | B2: processProperties() visualChanged tracking | ✅ | TiUIView.java |
 | B3: hierarchyHasListener() Caching | ✅ | KrollProxy.java |
 | B4: getRect()/getSize() primitive return | ✅ | TiViewProxy.java |
@@ -155,33 +155,30 @@ if (oldValue != null && oldValue.equals(newValue)) {
 
 **File:** `android/titanium/src/java/org/appcelerator/titanium/view/TiUIView.java`
 
-**Status:** 🔲
+**Status:** ✅ **[DONE]**
 
 **Problem:** ~40 `if/else if` branches with `key.equals()` – linear scan through all property names. For unhandled properties, all 40 comparisons are performed.
 
 **iOS comparison:** iOS uses a `switch`-like dispatch structure over `dirtyflags` bits, not string-based.
 
-**Proposed solution:** Dispatch table with property name-to-handler mapping:
-```java
-// Static lookup table (once at class load)
-private static final Map<String, PropertyHandler> PROPERTY_HANDLERS = new HashMap<>();
-static {
-    PROPERTY_HANDLERS.put(TiC.PROPERTY_LEFT, (view, old, newVal, proxy) -> view.handleLeft(old, newVal, proxy));
-    // ... more handlers
-}
+**Implementation:**
+- `PropertyHandler` Functional Interface definiert
+- `static final Map<String, PropertyHandler> PROPERTY_HANDLERS` Lookup-Tabelle (35 Einträge)
+- `propertyChanged()` prüft zuerst die Map (O(1) Lookup)
+- Fallback für Prefix-basierte Properties (Background, Border, Accessibility)
+- Alle Handler-Methoden als `static void handleXxx()` extrahiert
 
-@Override
-public void propertyChanged(String key, Object oldValue, Object newValue, KrollProxy proxy) {
-    PropertyHandler handler = PROPERTY_HANDLERS.get(key);
-    if (handler != null) {
-        handler.handle(this, oldValue, newValue, proxy);
-        return;
-    }
-    handlePropertyChanged(key, oldValue, newValue, proxy);
+```java
+// O(1) dispatch via property handler map
+PropertyHandler handler = PROPERTY_HANDLERS.get(key);
+if (handler != null) {
+    handler.handle(this, oldValue, newValue, proxy);
+    return;
 }
+// Fallback for prefix-based properties...
 ```
 
-**Estimated Impact:** O(1) instead of O(40) per property change. Significant for views with many property updates.
+**Estimated Impact:** O(1) statt O(40) pro Property-Änderung. Signifikant bei Views mit vielen Property-Updates.
 
 ---
 

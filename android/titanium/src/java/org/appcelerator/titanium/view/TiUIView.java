@@ -10,6 +10,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -76,6 +77,13 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 
 /**
+ * Functional interface for property change handlers.
+ */
+interface PropertyHandler {
+	void handle(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy);
+}
+
+/**
  * This class is for Titanium View implementations, that correspond with TiViewProxy.
  * A TiUIView is responsible for creating and maintaining a native Android View instance.
  */
@@ -139,6 +147,48 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	private static final int DIRTY_LAYOUT = 0x40;
 	private static final int DIRTY_HORIZONTAL_WRAP = 0x80;
 	private Choreographer.FrameCallback layoutBatchCallback;
+
+	// Property dispatch table for O(1) lookup instead of O(n) string comparison chain
+	private static final Map<String, PropertyHandler> PROPERTY_HANDLERS = new HashMap<>();
+	static
+	{
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_LEFT, TiUIView::handleLeft);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_TOP, TiUIView::handleTop);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_CENTER, TiUIView::handleCenter);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_RIGHT, TiUIView::handleRight);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_BOTTOM, TiUIView::handleBottom);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_SIZE, TiUIView::handleSize);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_HEIGHT, TiUIView::handleHeight);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_WIDTH, TiUIView::handleWidth);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_LAYOUT, TiUIView::handleLayout);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_ZINDEX, TiUIView::handleZIndex);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_FOCUSABLE, TiUIView::handleFocusable);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_TOUCH_ENABLED, TiUIView::handleTouchEnabled);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_FILTER_TOUCHES_WHEN_OBSCURED, TiUIView::handleFilterTouchesWhenObscured);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_VISIBLE, TiUIView::handleVisible);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_ENABLED, TiUIView::handleEnabled);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_OPACITY, TiUIView::handleOpacity);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_TRANSFORM, TiUIView::handleTransform);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_KEEP_SCREEN_ON, TiUIView::handleKeepScreenOn);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_ACCESSIBILITY_HIDDEN, TiUIView::handleAccessibilityHidden);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_ELEVATION, TiUIView::handleElevation);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_ANCHOR_POINT, TiUIView::handleAnchorPoint);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_TRANSLATION_X, TiUIView::handleTranslationX);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_TRANSLATION_Y, TiUIView::handleTranslationY);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_TRANSLATION_Z, TiUIView::handleTranslationZ);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_TRANSITION_NAME, TiUIView::handleTransitionName);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_SCALE_X, TiUIView::handleScaleX);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_SCALE_Y, TiUIView::handleScaleY);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_ROTATION, TiUIView::handleRotation);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_ROTATION_X, TiUIView::handleRotationX);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_ROTATION_Y, TiUIView::handleRotationY);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_HIDDEN_BEHAVIOR, TiUIView::handleHiddenBehavior);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_VIEW_SHADOW_COLOR, TiUIView::handleViewShadowColor);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_HORIZONTAL_WRAP, TiUIView::handleHorizontalWrap);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_SOFT_KEYBOARD_ON_FOCUS, TiUIView::handleSoftKeyboardOnFocus);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_TOUCH_FEEDBACK_COLOR, TiUIView::handleOpacity);
+		PROPERTY_HANDLERS.put(TiC.PROPERTY_TOUCH_FEEDBACK, TiUIView::handleOpacity);
+	}
 
 	// Since Android doesn't have a property to check to indicate
 	// the current animated x/y scale (from a scale animation), we track it here
@@ -777,130 +827,16 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		if (oldValue != null && oldValue.equals(newValue)) {
 			return;
 		}
-		if (key.equals(TiC.PROPERTY_LEFT)) {
-			resetPostAnimationValues();
-			resetTranslationX();
-			if (newValue != null) {
-				layoutParams.optionLeft = TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_LEFT);
-			} else {
-				layoutParams.optionLeft = null;
-			}
-			markLayoutDirty(DIRTY_LEFT);
-		} else if (key.equals(TiC.PROPERTY_TOP)) {
-			resetPostAnimationValues();
-			resetTranslationY();
-			if (newValue != null) {
-				layoutParams.optionTop = TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_TOP);
-			} else {
-				layoutParams.optionTop = null;
-			}
-			markLayoutDirty(DIRTY_TOP);
-		} else if (key.equals(TiC.PROPERTY_CENTER)) {
-			resetPostAnimationValues();
-			resetTranslationX();
-			resetTranslationY();
-			TiConvert.updateLayoutCenter(newValue, layoutParams);
-			markLayoutDirty(DIRTY_CENTER);
-		} else if (key.equals(TiC.PROPERTY_RIGHT)) {
-			resetPostAnimationValues();
-			resetTranslationX();
-			if (newValue != null) {
-				layoutParams.optionRight =
-					TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_RIGHT);
-			} else {
-				layoutParams.optionRight = null;
-			}
-			markLayoutDirty(DIRTY_RIGHT);
-		} else if (key.equals(TiC.PROPERTY_BOTTOM)) {
-			resetPostAnimationValues();
-			resetTranslationY();
-			if (newValue != null) {
-				layoutParams.optionBottom =
-					TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_BOTTOM);
-			} else {
-				layoutParams.optionBottom = null;
-			}
-			markLayoutDirty(DIRTY_BOTTOM);
-		} else if (key.equals(TiC.PROPERTY_SIZE)) {
-			if (newValue instanceof HashMap) {
-				@SuppressWarnings("unchecked")
-				HashMap<String, Object> d = (HashMap<String, Object>) newValue;
-				propertyChanged(TiC.PROPERTY_WIDTH, oldValue, d.get(TiC.PROPERTY_WIDTH), proxy);
-				propertyChanged(TiC.PROPERTY_HEIGHT, oldValue, d.get(TiC.PROPERTY_HEIGHT), proxy);
-			} else if (newValue != null) {
-				Log.w(TAG, "Unsupported property type (" + (newValue.getClass().getSimpleName()) + ") for key: " + key
-							   + ". Must be an object/dictionary");
-			}
-		} else if (key.equals(TiC.PROPERTY_HEIGHT)) {
-			resetPostAnimationValues();
-			if (newValue != null) {
-				layoutParams.optionHeight = null;
-				layoutParams.sizeOrFillHeightEnabled = true;
-				String heightStr = TiConvert.toString(newValue);
-				if (TiC.LAYOUT_SIZE.equals(heightStr)) {
-					layoutParams.autoFillsHeight = false;
-				} else if (TiC.LAYOUT_FILL.equals(heightStr)) {
-					layoutParams.autoFillsHeight = true;
-				} else if (!TiC.SIZE_AUTO.equals(heightStr)) {
-					layoutParams.optionHeight =
-						TiConvert.toTiDimension(heightStr, TiDimension.TYPE_HEIGHT);
-					layoutParams.sizeOrFillHeightEnabled = false;
-				}
-			} else {
-				layoutParams.optionHeight = null;
-			}
-			markLayoutDirty(DIRTY_SIZE);
-		} else if (key.equals(TiC.PROPERTY_HORIZONTAL_WRAP)) {
-			if (nativeView instanceof TiCompositeLayout) {
-				((TiCompositeLayout) nativeView).setEnableHorizontalWrap(TiConvert.toBoolean(newValue, true));
-			}
-			markLayoutDirty(DIRTY_HORIZONTAL_WRAP);
-		} else if (key.equals(TiC.PROPERTY_WIDTH)) {
-			resetPostAnimationValues();
-			if (newValue != null) {
-				layoutParams.optionWidth = null;
-				layoutParams.sizeOrFillWidthEnabled = true;
-				String widthStr = TiConvert.toString(newValue);
-				if (TiC.LAYOUT_SIZE.equals(widthStr)) {
-					layoutParams.autoFillsWidth = false;
-				} else if (TiC.LAYOUT_FILL.equals(widthStr)) {
-					layoutParams.autoFillsWidth = true;
-				} else if (!TiC.SIZE_AUTO.equals(widthStr)) {
-					layoutParams.optionWidth =
-						TiConvert.toTiDimension(widthStr, TiDimension.TYPE_WIDTH);
-					layoutParams.sizeOrFillWidthEnabled = false;
-				}
-			} else {
-				layoutParams.optionWidth = null;
-			}
-			markLayoutDirty(DIRTY_SIZE);
-		} else if (key.equals(TiC.PROPERTY_LAYOUT)) {
-			String layout = TiConvert.toString(newValue);
-			if (nativeView instanceof TiCompositeLayout) {
-				resetPostAnimationValues();
-				((TiCompositeLayout) nativeView).setLayoutArrangement(layout);
-				markLayoutDirty(DIRTY_LAYOUT);
-			}
-		} else if (key.equals(TiC.PROPERTY_ZINDEX)) {
-			if (newValue != null) {
-				layoutParams.optionZIndex = TiConvert.toInt(newValue);
-			} else {
-				layoutParams.optionZIndex = 0;
-			}
-			markLayoutDirty(DIRTY_LEFT); // zIndex affects layout ordering
-		} else if (key.equals(TiC.PROPERTY_FOCUSABLE) && newValue != null) {
-			registerForKeyPress(nativeView, TiConvert.toBoolean(newValue, false));
-		} else if (key.equals(TiC.PROPERTY_TOUCH_ENABLED)) {
-			nativeView.setEnabled(TiConvert.toBoolean(newValue));
-			doSetClickable(TiConvert.toBoolean(newValue));
-		} else if (key.equals(TiC.PROPERTY_FILTER_TOUCHES_WHEN_OBSCURED)) {
-			setFilterTouchesWhenObscured(TiConvert.toBoolean(newValue, false));
-		} else if (key.equals(TiC.PROPERTY_VISIBLE)) {
-			newValue = (newValue == null) ? false : newValue;
-			this.setVisibility(TiConvert.toBoolean(newValue) ? View.VISIBLE : View.INVISIBLE);
-		} else if (key.equals(TiC.PROPERTY_ENABLED)) {
-			nativeView.setEnabled(TiConvert.toBoolean(newValue));
-		} else if (key.startsWith(TiC.PROPERTY_BACKGROUND_PADDING)) {
+
+		// O(1) dispatch via property handler map
+		PropertyHandler handler = PROPERTY_HANDLERS.get(key);
+		if (handler != null) {
+			handler.handle(this, oldValue, newValue, proxy);
+			return;
+		}
+
+		// Fallback for prefix-based properties (background, border, accessibility)
+		if (key.startsWith(TiC.PROPERTY_BACKGROUND_PADDING)) {
 			Log.i(TAG, key + " not yet implemented.");
 		} else if (key.equals(TiC.PROPERTY_OPACITY) || key.equals(TiC.PROPERTY_TOUCH_FEEDBACK_COLOR)
 				   || key.equals(TiC.PROPERTY_TOUCH_FEEDBACK) || key.startsWith(TiC.PROPERTY_BACKGROUND_PREFIX)
@@ -1062,35 +998,6 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		} else if (key.equals(TiC.PROPERTY_SCALE_X)) {
 			if (getOuterView() != null) {
 				ViewCompat.setScaleX(getOuterView(), TiConvert.toFloat(newValue));
-			}
-		} else if (key.equals(TiC.PROPERTY_SCALE_Y)) {
-			if (getOuterView() != null) {
-				ViewCompat.setScaleY(getOuterView(), TiConvert.toFloat(newValue));
-			}
-		} else if (key.equals(TiC.PROPERTY_ROTATION)) {
-			if (getOuterView() != null) {
-				ViewCompat.setRotation(getOuterView(), TiConvert.toFloat(newValue));
-			}
-		} else if (key.equals(TiC.PROPERTY_ROTATION_X)) {
-			if (getOuterView() != null) {
-				ViewCompat.setRotationX(getOuterView(), TiConvert.toFloat(newValue));
-			}
-		} else if (key.equals(TiC.PROPERTY_ROTATION_Y)) {
-			if (getOuterView() != null) {
-				ViewCompat.setRotationY(getOuterView(), TiConvert.toFloat(newValue));
-			}
-		} else if (key.equals(TiC.PROPERTY_HIDDEN_BEHAVIOR)) {
-			hiddenBehavior = TiConvert.toInt(newValue, View.INVISIBLE);
-		} else if (key.equals(TiC.PROPERTY_VIEW_SHADOW_COLOR)) {
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-				if (nativeView != null) {
-					nativeView.setOutlineAmbientShadowColor(TiConvert.toColor(TiConvert.toString(newValue),
-						TiApplication.getAppCurrentActivity()));
-					nativeView.setOutlineSpotShadowColor(TiConvert.toColor(TiConvert.toString(newValue),
-						TiApplication.getAppCurrentActivity()));
-				}
-			} else {
-				Log.w(TAG, "Setting the 'viewShadowColor' property requires Android P or later");
 			}
 		} else if (Log.isDebugModeEnabled()) {
 			Log.d(TAG, "Unhandled property key: " + key, Log.DEBUG_MODE);
@@ -2573,5 +2480,314 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				info.setLongClickable(false);
 			}
 		});
+	}
+
+	// =====================================================================
+	// Property Handler Methods (dispatched via PROPERTY_HANDLERS map)
+	// =====================================================================
+
+	static void handleLeft(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.resetPostAnimationValues();
+		view.resetTranslationX();
+		if (newValue != null) {
+			view.layoutParams.optionLeft =
+				TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_LEFT);
+		} else {
+			view.layoutParams.optionLeft = null;
+		}
+		view.markLayoutDirty(DIRTY_LEFT);
+	}
+
+	static void handleTop(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.resetPostAnimationValues();
+		view.resetTranslationY();
+		if (newValue != null) {
+			view.layoutParams.optionTop =
+				TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_TOP);
+		} else {
+			view.layoutParams.optionTop = null;
+		}
+		view.markLayoutDirty(DIRTY_TOP);
+	}
+
+	static void handleCenter(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.resetPostAnimationValues();
+		view.resetTranslationX();
+		view.resetTranslationY();
+		TiConvert.updateLayoutCenter(newValue, view.layoutParams);
+		view.markLayoutDirty(DIRTY_CENTER);
+	}
+
+	static void handleRight(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.resetPostAnimationValues();
+		view.resetTranslationX();
+		if (newValue != null) {
+			view.layoutParams.optionRight =
+				TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_RIGHT);
+		} else {
+			view.layoutParams.optionRight = null;
+		}
+		view.markLayoutDirty(DIRTY_RIGHT);
+	}
+
+	static void handleBottom(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.resetPostAnimationValues();
+		view.resetTranslationY();
+		if (newValue != null) {
+			view.layoutParams.optionBottom =
+				TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_BOTTOM);
+		} else {
+			view.layoutParams.optionBottom = null;
+		}
+		view.markLayoutDirty(DIRTY_BOTTOM);
+	}
+
+	static void handleSize(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (newValue instanceof HashMap) {
+			@SuppressWarnings("unchecked")
+			HashMap<String, Object> d = (HashMap<String, Object>) newValue;
+			view.propertyChanged(TiC.PROPERTY_WIDTH, oldValue, d.get(TiC.PROPERTY_WIDTH), proxy);
+			view.propertyChanged(TiC.PROPERTY_HEIGHT, oldValue, d.get(TiC.PROPERTY_HEIGHT), proxy);
+		} else if (newValue != null) {
+			Log.w(TAG, "Unsupported property type (" + (newValue.getClass().getSimpleName()) + ") for key: "
+					   + TiC.PROPERTY_SIZE + ". Must be an object/dictionary");
+		}
+	}
+
+	static void handleHeight(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.resetPostAnimationValues();
+		if (newValue != null) {
+			view.layoutParams.optionHeight = null;
+			view.layoutParams.sizeOrFillHeightEnabled = true;
+			String heightStr = TiConvert.toString(newValue);
+			if (TiC.LAYOUT_SIZE.equals(heightStr)) {
+				view.layoutParams.autoFillsHeight = false;
+			} else if (TiC.LAYOUT_FILL.equals(heightStr)) {
+				view.layoutParams.autoFillsHeight = true;
+			} else if (!TiC.SIZE_AUTO.equals(heightStr)) {
+				view.layoutParams.optionHeight =
+					TiConvert.toTiDimension(heightStr, TiDimension.TYPE_HEIGHT);
+				view.layoutParams.sizeOrFillHeightEnabled = false;
+			}
+		} else {
+			view.layoutParams.optionHeight = null;
+		}
+		view.markLayoutDirty(DIRTY_SIZE);
+	}
+
+	static void handleWidth(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.resetPostAnimationValues();
+		if (newValue != null) {
+			view.layoutParams.optionWidth = null;
+			view.layoutParams.sizeOrFillWidthEnabled = true;
+			String widthStr = TiConvert.toString(newValue);
+			if (TiC.LAYOUT_SIZE.equals(widthStr)) {
+				view.layoutParams.autoFillsWidth = false;
+			} else if (TiC.LAYOUT_FILL.equals(widthStr)) {
+				view.layoutParams.autoFillsWidth = true;
+			} else if (!TiC.SIZE_AUTO.equals(widthStr)) {
+				view.layoutParams.optionWidth =
+					TiConvert.toTiDimension(widthStr, TiDimension.TYPE_WIDTH);
+				view.layoutParams.sizeOrFillWidthEnabled = false;
+			}
+		} else {
+			view.layoutParams.optionWidth = null;
+		}
+		view.markLayoutDirty(DIRTY_SIZE);
+	}
+
+	static void handleLayout(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		String layout = TiConvert.toString(newValue);
+		if (view.nativeView instanceof TiCompositeLayout) {
+			view.resetPostAnimationValues();
+			((TiCompositeLayout) view.nativeView).setLayoutArrangement(layout);
+			view.markLayoutDirty(DIRTY_LAYOUT);
+		}
+	}
+
+	static void handleZIndex(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (newValue != null) {
+			view.layoutParams.optionZIndex = TiConvert.toInt(newValue);
+		} else {
+			view.layoutParams.optionZIndex = 0;
+		}
+		view.markLayoutDirty(DIRTY_LEFT);
+	}
+
+	static void handleFocusable(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (newValue != null) {
+			view.registerForKeyPress(view.nativeView, TiConvert.toBoolean(newValue, false));
+		}
+	}
+
+	static void handleTouchEnabled(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.nativeView.setEnabled(TiConvert.toBoolean(newValue));
+		view.doSetClickable(TiConvert.toBoolean(newValue));
+	}
+
+	static void handleFilterTouchesWhenObscured(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.setFilterTouchesWhenObscured(TiConvert.toBoolean(newValue, false));
+	}
+
+	static void handleVisible(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		newValue = (newValue == null) ? false : newValue;
+		view.setVisibility(TiConvert.toBoolean(newValue) ? View.VISIBLE : View.INVISIBLE);
+	}
+
+	static void handleEnabled(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.nativeView.setEnabled(TiConvert.toBoolean(newValue));
+	}
+
+	static void handleOpacity(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		// No-op: opacity is handled in the fallback branch with background/border logic
+	}
+
+	static void handleTransform(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.nativeView != null) {
+			view.applyTransform((Ti2DMatrix) newValue);
+		}
+	}
+
+	static void handleKeepScreenOn(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.nativeView != null) {
+			view.nativeView.setKeepScreenOn(TiConvert.toBoolean(newValue));
+		}
+	}
+
+	static void handleAccessibilityHidden(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.applyAccessibilityHidden(newValue);
+	}
+
+	static void handleElevation(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			ViewCompat.setElevation(view.getOuterView(), TiConvert.toFloat(newValue));
+		}
+	}
+
+	static void handleAnchorPoint(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			if (newValue instanceof HashMap) {
+				view.setAnchor((HashMap) newValue);
+			} else {
+				Log.e(TAG, "Invalid argument type for anchorPoint property. Ignoring");
+			}
+		}
+	}
+
+	static void handleTranslationX(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			ViewCompat.setTranslationX(view.getOuterView(), TiConvert.toFloat(newValue));
+		}
+	}
+
+	static void handleTranslationY(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			ViewCompat.setTranslationY(view.getOuterView(), TiConvert.toFloat(newValue));
+		}
+	}
+
+	static void handleTranslationZ(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			ViewCompat.setTranslationZ(view.getOuterView(), TiConvert.toFloat(newValue));
+		}
+	}
+
+	static void handleTransitionName(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.nativeView != null) {
+			ViewCompat.setTransitionName(view.nativeView, TiConvert.toString(newValue));
+		}
+	}
+
+	static void handleScaleX(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			ViewCompat.setScaleX(view.getOuterView(), TiConvert.toFloat(newValue));
+		}
+	}
+
+	static void handleScaleY(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			ViewCompat.setScaleY(view.getOuterView(), TiConvert.toFloat(newValue));
+		}
+	}
+
+	static void handleRotation(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			ViewCompat.setRotation(view.getOuterView(), TiConvert.toFloat(newValue));
+		}
+	}
+
+	static void handleRotationX(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			ViewCompat.setRotationX(view.getOuterView(), TiConvert.toFloat(newValue));
+		}
+	}
+
+	static void handleRotationY(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.getOuterView() != null) {
+			ViewCompat.setRotationY(view.getOuterView(), TiConvert.toFloat(newValue));
+		}
+	}
+
+	static void handleHiddenBehavior(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		view.hiddenBehavior = TiConvert.toInt(newValue, View.INVISIBLE);
+	}
+
+	static void handleViewShadowColor(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+			if (view.nativeView != null) {
+				view.nativeView.setOutlineAmbientShadowColor(
+					TiConvert.toColor(TiConvert.toString(newValue), TiApplication.getAppCurrentActivity()));
+				view.nativeView.setOutlineSpotShadowColor(
+					TiConvert.toColor(TiConvert.toString(newValue), TiApplication.getAppCurrentActivity()));
+			}
+		} else {
+			Log.w(TAG, "Setting the 'viewShadowColor' property requires Android P or later");
+		}
+	}
+
+	static void handleHorizontalWrap(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		if (view.nativeView instanceof TiCompositeLayout) {
+			((TiCompositeLayout) view.nativeView).setEnableHorizontalWrap(TiConvert.toBoolean(newValue, true));
+		}
+		view.markLayoutDirty(DIRTY_HORIZONTAL_WRAP);
+	}
+
+	static void handleSoftKeyboardOnFocus(TiUIView view, Object oldValue, Object newValue, KrollProxy proxy)
+	{
+		Log.w(TAG, "Focus state changed to " + TiConvert.toString(newValue)
+				   + " not honored until next focus event.", Log.DEBUG_MODE);
 	}
 }
