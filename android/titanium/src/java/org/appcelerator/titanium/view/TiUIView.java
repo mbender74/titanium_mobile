@@ -836,13 +836,14 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			if (newValue != null) {
 				layoutParams.optionHeight = null;
 				layoutParams.sizeOrFillHeightEnabled = true;
-				if (newValue.equals(TiC.LAYOUT_SIZE)) {
+				String heightStr = TiConvert.toString(newValue);
+				if (TiC.LAYOUT_SIZE.equals(heightStr)) {
 					layoutParams.autoFillsHeight = false;
-				} else if (newValue.equals(TiC.LAYOUT_FILL)) {
+				} else if (TiC.LAYOUT_FILL.equals(heightStr)) {
 					layoutParams.autoFillsHeight = true;
-				} else if (!newValue.equals(TiC.SIZE_AUTO)) {
+				} else if (!TiC.SIZE_AUTO.equals(heightStr)) {
 					layoutParams.optionHeight =
-						TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_HEIGHT);
+						TiConvert.toTiDimension(heightStr, TiDimension.TYPE_HEIGHT);
 					layoutParams.sizeOrFillHeightEnabled = false;
 				}
 			} else {
@@ -859,13 +860,14 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			if (newValue != null) {
 				layoutParams.optionWidth = null;
 				layoutParams.sizeOrFillWidthEnabled = true;
-				if (newValue.equals(TiC.LAYOUT_SIZE)) {
+				String widthStr = TiConvert.toString(newValue);
+				if (TiC.LAYOUT_SIZE.equals(widthStr)) {
 					layoutParams.autoFillsWidth = false;
-				} else if (newValue.equals(TiC.LAYOUT_FILL)) {
+				} else if (TiC.LAYOUT_FILL.equals(widthStr)) {
 					layoutParams.autoFillsWidth = true;
-				} else if (!newValue.equals(TiC.SIZE_AUTO)) {
+				} else if (!TiC.SIZE_AUTO.equals(widthStr)) {
 					layoutParams.optionWidth =
-						TiConvert.toTiDimension(TiConvert.toString(newValue), TiDimension.TYPE_WIDTH);
+						TiConvert.toTiDimension(widthStr, TiDimension.TYPE_WIDTH);
 					layoutParams.sizeOrFillWidthEnabled = false;
 				}
 			} else {

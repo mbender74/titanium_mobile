@@ -504,7 +504,7 @@ public class TiCompositeLayout extends ViewGroup implements OnHierarchyChangeLis
 
 		// Do not propagate given insets to child views unless the insets have changed.
 		// This greatly improves performance if we have deeply nested views since each view will trigger a relayout.
-		if (insets.equals(this.previousInsets)) {
+		if (java.util.Objects.equals(insets, this.previousInsets)) {
 			return insets;
 		}
 		this.previousInsets = insets;

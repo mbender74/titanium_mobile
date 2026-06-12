@@ -519,11 +519,11 @@ public class TiUILabel extends TiUIView
 
 		if (d.containsKey(TiC.PROPERTY_TEXT_TRANSFORM)) {
 			String transformName = TiConvert.toString(d, TiC.PROPERTY_TEXT_TRANSFORM);
-			if (transformName.equals("uppercase")) {
+			if (java.util.Objects.equals(transformName, "uppercase")) {
 				textFilter = TEXT_FILTER_UPPERCASE;
-			} else if (transformName.equals("lowercase")) {
+			} else if (java.util.Objects.equals(transformName, "lowercase")) {
 				textFilter = TEXT_FILTER_LOWERCASE;
-			} else if (transformName.equals("none")) {
+			} else if (java.util.Objects.equals(transformName, "none")) {
 				textFilter = TEXT_FILTER_DEFAULT;
 			}
 		}
@@ -676,11 +676,11 @@ public class TiUILabel extends TiUIView
 			}
 		} else if (key.equals(TiC.PROPERTY_TEXT_TRANSFORM)) {
 			String transformName = TiConvert.toString(newValue);
-			if (transformName.equals("uppercase")) {
+			if (java.util.Objects.equals(transformName, "uppercase")) {
 				textFilter = TEXT_FILTER_UPPERCASE;
-			} else if (transformName.equals("lowercase")) {
+			} else if (java.util.Objects.equals(transformName, "lowercase")) {
 				textFilter = TEXT_FILTER_LOWERCASE;
-			} else if (transformName.equals("none")) {
+			} else if (java.util.Objects.equals(transformName, "none")) {
 				textFilter = TEXT_FILTER_DEFAULT;
 			}
 			updateLabelText();

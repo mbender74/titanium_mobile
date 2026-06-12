@@ -269,7 +269,8 @@ public abstract class TiBaseActivity extends AppCompatActivity implements TiActi
 	{
 		for (int i = 0; i < dialogs.size(); i++) {
 			DialogWrapper p = dialogs.get(i);
-			if (p.getDialog().equals(d)) {
+			Dialog dialog = p.getDialog();
+			if (dialog != null && dialog.equals(d)) {
 				p.release();
 				dialogs.remove(i);
 				return;

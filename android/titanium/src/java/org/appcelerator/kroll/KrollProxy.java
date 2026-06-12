@@ -108,14 +108,15 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			HierarchyListenerCacheKey that = (HierarchyListenerCacheKey) o;
-			return proxyId.equals(that.proxyId) && event.equals(that.event);
+			return java.util.Objects.equals(proxyId, that.proxyId)
+				&& java.util.Objects.equals(event, that.event);
 		}
 
 		@Override
 		public int hashCode()
 		{
-			int result = proxyId.hashCode();
-			result = 31 * result + event.hashCode();
+			int result = java.util.Objects.hashCode(proxyId);
+			result = 31 * result + java.util.Objects.hashCode(event);
 			return result;
 		}
 	}
@@ -342,7 +343,8 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 
 		// Determine which localized property this locale property updates.
 		for (Map.Entry<String, Object> entry : langConversionTable.entrySet()) {
-			if (entry.getValue().toString().equals(localeProperty)) {
+			Object value = entry.getValue();
+			if (value != null && value.toString().equals(localeProperty)) {
 				String targetProperty = entry.getKey();
 				String localizedValue = getLocalizedText(newLookupId);
 				if (localizedValue == null) {

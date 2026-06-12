@@ -554,9 +554,9 @@ public class TiUIWebView extends TiUIView
 	private boolean mightBeHtml(String url)
 	{
 		String mime = TiMimeTypeHelper.getMimeType(url);
-		if (mime.equals("text/html")) {
+		if (java.util.Objects.equals(mime, "text/html")) {
 			return true;
-		} else if (mime.equals("application/xhtml+xml")) {
+		} else if (java.util.Objects.equals(mime, "application/xhtml+xml")) {
 			return true;
 		} else {
 			return false;

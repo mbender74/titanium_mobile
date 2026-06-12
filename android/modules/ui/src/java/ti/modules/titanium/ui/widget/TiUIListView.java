@@ -84,21 +84,21 @@ public class TiUIListView extends TiUIView
 	 */
 	private void processProperty(String name, Object value)
 	{
-		if (name.equals(TiC.PROPERTY_OVER_SCROLL_MODE)) {
+		if (TiC.PROPERTY_OVER_SCROLL_MODE.equals(name)) {
 			final int overscrollMode = TiConvert.toInt(value, View.OVER_SCROLL_ALWAYS);
 
 			// Set overscroll mode.
 			this.listView.getRecyclerView().setOverScrollMode(overscrollMode);
 		}
 
-		if (name.equals(TiC.PROPERTY_CAN_SCROLL)) {
+		if (TiC.PROPERTY_CAN_SCROLL.equals(name)) {
 			final boolean isScrollable = TiConvert.toBoolean(value, true);
 
 			// Set list scrolling.
 			this.listView.getRecyclerView().setScrollEnabled(isScrollable);
 		}
 
-		if (name.equals(TiC.PROPERTY_REFRESH_CONTROL)) {
+		if (TiC.PROPERTY_REFRESH_CONTROL.equals(name)) {
 
 			if (value instanceof RefreshControlProxy) {
 
@@ -112,7 +112,7 @@ public class TiUIListView extends TiUIView
 			}
 		}
 
-		if (name.equals(TiC.PROPERTY_SEARCH_VIEW)) {
+		if (TiC.PROPERTY_SEARCH_VIEW.equals(name)) {
 			final ViewParent parent = getOuterView().getParent();
 			final TiViewProxy parentProxy = getProxy().getParent();
 
@@ -194,33 +194,33 @@ public class TiUIListView extends TiUIView
 			}
 		}
 
-		if ((name.equals(TiC.PROPERTY_SEPARATOR_STYLE)
-			|| name.equals(TiC.PROPERTY_SEPARATOR_HEIGHT)
-			|| name.equals(TiC.PROPERTY_SEPARATOR_COLOR))
+		if (TiC.PROPERTY_SEPARATOR_STYLE.equals(name)
+			|| TiC.PROPERTY_SEPARATOR_HEIGHT.equals(name)
+			|| TiC.PROPERTY_SEPARATOR_COLOR.equals(name)
 			&& value != null) {
 			final Context context = getProxy().getActivity();
 			final KrollDict properties = getProxy().getProperties();
 
 			int style = properties.optInt(TiC.PROPERTY_SEPARATOR_STYLE,
 				UIModule.TABLE_VIEW_SEPARATOR_STYLE_SINGLE_LINE);
-			if (name.equals(TiC.PROPERTY_SEPARATOR_STYLE)) {
+			if (TiC.PROPERTY_SEPARATOR_STYLE.equals(name)) {
 				style = TiConvert.toInt(value);
 			}
 
 			String heightString = properties.optString(TiC.PROPERTY_SEPARATOR_HEIGHT, "1dp");
-			if (name.equals(TiC.PROPERTY_SEPARATOR_HEIGHT)) {
+			if (TiC.PROPERTY_SEPARATOR_HEIGHT.equals(name)) {
 				heightString = TiConvert.toString(value);
 			}
 			final int height = style == UIModule.TABLE_VIEW_SEPARATOR_STYLE_SINGLE_LINE
 				? TiConvert.toTiDimension(heightString, TiDimension.TYPE_HEIGHT)
 				.getAsPixels((View) getNativeView().getParent()) : 0;
 
-			boolean hasColor = name.equals(TiC.PROPERTY_SEPARATOR_COLOR) && value != null;
+			boolean hasColor = TiC.PROPERTY_SEPARATOR_COLOR.equals(name) && value != null;
 			if (height == 0) {
 				this.listView.setSeparator(0, height);
 			} else if (hasColor || properties.containsKeyAndNotNull(TiC.PROPERTY_SEPARATOR_COLOR)) {
 				String colorString;
-				if (name.equals(TiC.PROPERTY_SEPARATOR_COLOR)) {
+				if (TiC.PROPERTY_SEPARATOR_COLOR.equals(name)) {
 					colorString = TiConvert.toString(value);
 				} else {
 					colorString = properties.getString(TiC.PROPERTY_SEPARATOR_COLOR);
@@ -243,17 +243,17 @@ public class TiUIListView extends TiUIView
 			}
 		}
 
-		if (name.equals(TiC.PROPERTY_SHOW_VERTICAL_SCROLL_INDICATOR)) {
+		if (TiC.PROPERTY_SHOW_VERTICAL_SCROLL_INDICATOR.equals(name)) {
 
 			// Set vertical scroll indicator.
 			this.listView.getRecyclerView().setVerticalScrollBarEnabled(TiConvert.toBoolean(value, true));
 		}
 
-		if (name.equals(TiC.PROPERTY_HEADER_TITLE)
-			|| name.equals(TiC.PROPERTY_HEADER_VIEW)
-			|| name.equals(TiC.PROPERTY_FOOTER_TITLE)
-			|| name.equals(TiC.PROPERTY_FOOTER_VIEW)
-			|| name.equals(TiC.PROPERTY_SEARCH_TEXT)) {
+		if (TiC.PROPERTY_HEADER_TITLE.equals(name)
+			|| TiC.PROPERTY_HEADER_VIEW.equals(name)
+			|| TiC.PROPERTY_FOOTER_TITLE.equals(name)
+			|| TiC.PROPERTY_FOOTER_VIEW.equals(name)
+			|| TiC.PROPERTY_SEARCH_TEXT.equals(name)) {
 			this.listView.update(true);
 		}
 	}
@@ -284,8 +284,8 @@ public class TiUIListView extends TiUIView
 	@Override
 	public void propertyChanged(String key, Object oldValue, Object newValue, KrollProxy proxy)
 	{
-		if (key.equals(TiC.PROPERTY_TOUCH_FEEDBACK)
-			|| key.equals(TiC.PROPERTY_TOUCH_FEEDBACK_COLOR)) {
+		if (TiC.PROPERTY_TOUCH_FEEDBACK.equals(key)
+			|| TiC.PROPERTY_TOUCH_FEEDBACK_COLOR.equals(key)) {
 
 			// Update list items.
 			this.listView.update(true);

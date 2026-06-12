@@ -171,7 +171,7 @@ public abstract class TiViewProxy extends KrollProxy
 		}
 
 		String baseUrl = creationUrl.baseUrl;
-		if (baseUrl == null || (baseUrl.equals("app://") && creationUrl.url.equals(""))) {
+		if (baseUrl == null || (baseUrl.equals("app://") && java.util.Objects.equals(creationUrl.url, ""))) {
 			baseUrl = "app://app.js";
 		} else {
 			baseUrl = creationUrl.resolve();
@@ -781,7 +781,8 @@ public abstract class TiViewProxy extends KrollProxy
 					}
 				}
 
-				if (child.hasProperty(TiC.PROPERTY_ID) && child.getProperty(TiC.PROPERTY_ID).equals(id)) {
+				Object childId = child.getProperty(TiC.PROPERTY_ID);
+				if (child.hasProperty(TiC.PROPERTY_ID) && java.util.Objects.equals(childId, id)) {
 					return child;
 				}
 			}

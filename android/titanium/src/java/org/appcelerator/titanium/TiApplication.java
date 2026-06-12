@@ -850,7 +850,8 @@ public abstract class TiApplication extends Application implements KrollApplicat
 		 *    Emulator: 'development'
 		 *    Device: 'test'
 		 */
-		boolean development = getDeployType().equals(TiApplication.DEPLOY_TYPE_DEVELOPMENT);
+		String deployType = getDeployType();
+		boolean development = deployType != null && deployType.equals(TiApplication.DEPLOY_TYPE_DEVELOPMENT);
 		if (!development) {
 			return false;
 		}
